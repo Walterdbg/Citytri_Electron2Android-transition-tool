@@ -1,0 +1,5 @@
+{
+  "name": "citytri-electron2android-transition-tool",
+  "version": "0.9.7-dev.12-mobile",
+  "description": "Reference/preview artifact for the tablet-mobile UI work, branched off Shipment Tracker dev.10 for evaluation as a future Capacitor/Cordova mobile app"
+}

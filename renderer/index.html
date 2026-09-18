@@ -1,0 +1,1931 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citytri Shipment Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Karla:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg:#F7F5F1; --surface:#FFFFFF; --surface-2:#FBF9F5;
+    --ink:#1E1B16; --ink-dim:#6B6459; --ink-faint:#9B9284;
+    --accent:#1F6F78; --accent-ink:#FFFFFF; --accent-2:#E8532A;
+    --line:#E4DFD5; --line-strong:#D2CABC;
+    --good:#2F7D4F; --good-bg:#E7F2EA;
+    --warn:#9A6B12; --warn-bg:#FBEFDB;
+    --bad:#B23A2E; --bad-bg:#FBE7E3;
+    --shadow: 0 1px 2px rgba(30,27,22,0.06), 0 8px 24px -12px rgba(30,27,22,0.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#17140F; --surface:#201C16; --surface-2:#231F19;
+      --ink:#F3EEE4; --ink-dim:#B0A692; --ink-faint:#7C7362;
+      --accent:#5FC2CC; --accent-ink:#0B1E1F; --accent-2:#FF7A4D;
+      --line:#39332A; --line-strong:#4A4234;
+      --good:#6FCB93; --good-bg:#1C2E22;
+      --warn:#E7B75C; --warn-bg:#332811;
+      --bad:#FF8A78; --bad-bg:#3A1E19;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 28px -14px rgba(0,0,0,0.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#17140F; --surface:#201C16; --surface-2:#231F19;
+    --ink:#F3EEE4; --ink-dim:#B0A692; --ink-faint:#7C7362;
+    --accent:#5FC2CC; --accent-ink:#0B1E1F; --accent-2:#FF7A4D;
+    --line:#39332A; --line-strong:#4A4234;
+    --good:#6FCB93; --good-bg:#1C2E22;
+    --warn:#E7B75C; --warn-bg:#332811;
+    --bad:#FF8A78; --bad-bg:#3A1E19;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 28px -14px rgba(0,0,0,0.6);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Karla', system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,.display{ font-family:'Oswald', 'Arial Narrow', sans-serif; text-transform:uppercase; letter-spacing:0.02em; text-wrap:balance; margin:0; }
+  .mono{ font-family:'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+  /* Chromium's UA stylesheet gives <button> its own default text color
+     (doesn't inherit from body like other elements) — every custom button in
+     this app (event-row, chips, action-cards, wordmark) relies on inheriting
+     the theme's ink color, so reset it here once rather than per-class. */
+  button{ font-family:inherit; color:inherit; }
+  a{ color:var(--accent-2); }
+
+  /* height (not min-height) caps .app at the viewport, so .layout's children
+     (sidebar/main) scroll independently within it instead of the whole page
+     growing taller than the window and scrolling as one — which was
+     dragging the sidebar out of view along with the records table. */
+  .app{ display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  /* #root (plain div, filled by render()) must itself be a flex container
+     with min-height:0 for .layout's flex:1 to have anything to flex within —
+     without this, the height:100vh above just clips content instead of
+     making it scrollable, since the constraint never reaches .layout. */
+  #root{ flex:1; min-height:0; display:flex; flex-direction:column; }
+  #root > .layout{ flex:1; min-height:0; }
+  #root > .home, #root > .setup-screen{ flex:1; min-height:0; overflow-y:auto; }
+  .topbar{ display:flex; align-items:center; gap:14px; padding:9px 24px; border-bottom:1px solid var(--line); background:var(--surface); }
+  .wordmark{ display:flex; align-items:baseline; gap:8px; background:none; border:none; cursor:pointer; padding:0; }
+  .wordmark .flag{ font-size:1.1rem; }
+  .wordmark h1{ font-size:1.15rem; font-weight:700; letter-spacing:0.03em; color:var(--ink); }
+  .sub{ font-size:0.72rem; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.08em; }
+  .topbar-spacer{ flex:1; }
+  .btn{ appearance:none; border:none; border-radius:9px; padding:9px 16px; font-size:0.82rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:0.04em; font-family:'Karla',sans-serif; }
+  .btn.primary{ background:var(--accent); color:var(--accent-ink); }
+  .btn.primary:hover{ filter:brightness(1.06); }
+  .btn.warn{ background:var(--accent-2); color:#fff; }
+  .btn.ghost{ background:transparent; color:var(--ink-dim); border:1px solid var(--line-strong); }
+  .btn.ghost:hover{ border-color:var(--accent); color:var(--ink); }
+  .btn.small{ padding:5px 11px; font-size:0.72rem; border-radius:7px; }
+  .btn:disabled{ opacity:0.45; cursor:not-allowed; }
+
+  .layout{ flex:1; display:grid; grid-template-columns:360px 1fr; min-height:0; }
+  /* Reversible, not a real tradeoff — the sidebar (event name, status
+     stats, workflow buttons) is only ever hidden until toggled back; toggle
+     state lives in memory only, so it starts expanded again each launch. */
+  .layout.sidebar-collapsed{ grid-template-columns:1fr; }
+  .layout.sidebar-collapsed > .sidebar{ display:none; }
+  /* ============ Tablet + phone (<=960px): per
+     docs/Claude_Tablet_Mobile_UI_Protocol.md — TWO MUTUALLY-EXCLUSIVE
+     FULL-WIDTH STATES, not a side-by-side squeeze. Direct requirement:
+     "The records list and expanded runner details must not be squeezed
+     beside this panel." This supersedes the earlier tablet side-column
+     attempt (220px sidebar + table) at this same breakpoint — that version
+     is gone. Desktop (>960px) is completely untouched by anything below:
+     .layout's base grid rule above still applies there exactly as before,
+     and none of these rules can match at desktop widths.
+
+     Reuses the exact same sidebarCollapsed state/toggle already built for
+     desktop — nothing new in JS. Default (not collapsed) shows the event
+     workspace (.sidebar) only, full width; toggling ☰ hides it and shows
+     the operational area (.main) instead, also full width. The general
+     ".layout.sidebar-collapsed > .sidebar{display:none}" rule above already
+     covers "hide the sidebar when toggled" at every width, so it isn't
+     repeated here — only the narrow-width-specific pieces are added. */
+  @media (max-width:960px){
+    .layout{ display:block; overflow-y:auto; }
+    .layout .sidebar{ overflow-y:visible; width:100%; }
+    .layout .main{ overflow-y:visible; display:none; }
+    .layout.sidebar-collapsed .main{ display:block; }
+    .records-filter-head{ position:static; }
+    .topbar{ flex-wrap:wrap; row-gap:6px; }
+    .topbar .wordmark{ flex-basis:100%; }
+    /* Status and Workflow side by side when the width allows it (tablet),
+       per spec: "Status and Workflow may use two balanced columns when the
+       width permits." Reverts to plain stacking below 600px — confirmed
+       too cramped for two real columns at phone width. */
+  }
+  @media (min-width:600px) and (max-width:960px){
+    .sidebar-status-workflow{ display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start; }
+  }
+  /* Records: the desktop table is genuinely desktop-only now — showing it
+     at tablet width just because it happened to fit was resizing the
+     desktop solution, not designing for tablet (direct correction; the
+     protocol is explicit: tablet is "not... a compressed desktop"). Both
+     tablet and phone get the same purpose-built list view instead, built
+     around the protocol's own prioritized field set (BIB, name, placing,
+     items, address/shipment status — email demoted to the expanded detail
+     only). .records-card-view is always rendered by JS regardless of
+     width — only CSS decides which view shows, so there is no JavaScript
+     branching on viewport width. */
+  .records-card-view{ display:none; }
+  @media (max-width:960px){
+    .records-table-view{ display:none; }
+    .records-card-view{ display:block; }
+  }
+  .record-card{ background:var(--surface); border:1px solid var(--line); border-left:4px solid transparent; border-radius:10px; padding:12px 14px; margin-bottom:8px; display:flex; flex-direction:column; gap:6px; cursor:pointer; }
+  .record-card.open{ border-color:var(--accent); }
+  .record-card-head{ display:flex; align-items:center; gap:10px; }
+  .record-card-head input[type="checkbox"]{ flex:none; }
+  .record-card-name{ font-weight:700; flex:1; }
+  .record-card-chevron{ color:var(--ink-faint); flex:none; }
+  .record-card-detail{ background:var(--surface-2); border-radius:10px; padding:16px 14px; margin:-4px 0 8px; }
+  /* min-width:0 matters here, not just min-height:0 — a CSS Grid track
+     sized with 1fr still has an implicit minimum equal to its content's
+     min-content width unless the item explicitly allows shrinking below
+     that. Without it, at a narrow single-column width the track gets
+     forced wide enough to fit whatever's least breakable inside (a table,
+     usually), instead of the real available width — confirmed directly:
+     774px wide inside a 390px viewport before this was added. */
+  .sidebar{ border-right:1px solid var(--line); background:var(--surface-2); padding:16px 14px 24px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; min-height:0; min-width:0; }
+  .main{ padding:22px 26px 40px; overflow-y:auto; display:flex; flex-direction:column; gap:20px; min-height:0; min-width:0; }
+
+  .home{ padding:32px 28px 40px; overflow-y:auto; display:flex; flex-direction:column; gap:22px; flex:1; }
+  .event-bucket-title{ font-size:0.72rem; text-transform:uppercase; letter-spacing:0.09em; color:var(--ink-faint); font-weight:700; margin:18px 0 8px; }
+  .event-list{ background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .event-row{ display:flex; align-items:center; gap:14px; padding:9px 16px; background:transparent; border:none; border-bottom:1px solid var(--line); cursor:pointer; text-align:left; width:100%; font-size:0.86rem; }
+  .event-row:last-child{ border-bottom:none; }
+  .event-row:hover{ background:var(--surface-2); }
+  .event-row .num{ font-family:'IBM Plex Mono',monospace; color:var(--ink-faint); width:2.4em; flex:none; }
+  .event-row .name{ font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .event-row .meta{ font-size:0.78rem; color:var(--ink-dim); font-family:'IBM Plex Mono',monospace; flex:none; }
+
+  .setup-screen{ flex:1; display:flex; align-items:center; justify-content:center; padding:40px; }
+  .setup-card{ max-width:520px; text-align:center; display:flex; flex-direction:column; gap:16px; align-items:center; }
+
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
+  .card-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--line); gap:10px; flex-wrap:wrap; }
+  .card-head h3{ font-size:0.9rem; letter-spacing:0.04em; }
+  .card-body{ padding:16px 18px 18px; }
+  /* Scoped to the Records table's own filter header only — .card-head
+     itself stays untouched since every other card on every screen shares
+     that class. Sticks to the top of .main's own scroll (same mechanism
+     .bulkbar already uses at the bottom), so the search/filter/distance
+     controls stay reachable without following the whole card upward.
+     top is -22px, not 0 — .main's own 22px top padding doesn't scroll away
+     (it's part of the scrollport, not the scrolled content), so a plain
+     top:0 rests 22px below .main's real edge. That gap let a table row's
+     top sliver render above the sticky bar since it's still technically
+     inside .main's clip region. Negative top by that exact amount closes
+     the gap so the header sits flush and nothing shows above it. */
+  .records-filter-head{ position:sticky; top:-22px; z-index:6; background:var(--surface); box-shadow:0 4px 10px -6px rgba(0,0,0,0.35); }
+
+  .action-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:800px){ .action-grid{ grid-template-columns:1fr; } }
+  .action-card{ text-align:left; background:var(--surface); border:1px solid var(--line); border-top:4px solid var(--accent); border-radius:14px; box-shadow:var(--shadow); padding:16px 18px; cursor:pointer; display:flex; flex-direction:column; gap:8px; }
+  .action-card:hover{ border-color:var(--accent); }
+  .action-card .kicker{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-faint); font-weight:700; }
+  .action-card .title{ font-family:'Oswald',sans-serif; font-size:1.05rem; }
+  .action-card .desc{ font-size:0.8rem; color:var(--ink-dim); line-height:1.4; }
+
+  .stat-strip{ display:flex; gap:10px; flex-wrap:wrap; }
+  .stat-pill{ background:var(--surface-2); border:1px solid var(--line); border-radius:999px; padding:6px 13px; font-size:0.76rem; color:var(--ink-dim); display:flex; gap:6px; align-items:center; }
+  .stat-pill b{ color:var(--ink); font-family:'IBM Plex Mono',monospace; }
+
+  .chip-row{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{ border:1px solid var(--line-strong); background:var(--surface); color:var(--ink-dim); font-size:0.74rem; padding:5px 10px; border-radius:999px; cursor:pointer; }
+  .chip:hover{ border-color:var(--accent); color:var(--ink); }
+  .chip.active{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600; }
+
+  table.rt{ width:100%; border-collapse:collapse; font-size:0.82rem; }
+  table.rt th{ text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-faint); padding:8px 10px; border-bottom:1px solid var(--line-strong); }
+  table.rt td{ padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.rt tr.selected{ background:color-mix(in srgb, var(--accent) 8%, transparent); }
+  table.rt tr:hover{ background:var(--surface-2); }
+  /* Solid fill + white text, not tinted-bg/tinted-text — the tinted pairing
+     read as low-contrast/near-black on some displays. */
+  .status-pill{ display:inline-block; padding:2px 9px; border-radius:6px; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:#fff; }
+  .status-pill.READY, .status-pill.SHIPPED{ background:var(--good); color:#0b1f13; }
+  .status-pill.ADDRESS-REQUIRED, .status-pill.MISSING-ADDRESS, .status-pill.NOT-STARTED{ background:var(--warn); color:#241a02; }
+  .status-pill.ADDRESS-REVIEW-REQUIRED, .status-pill.MATCH-REVIEW-REQUIRED{ background:var(--bad); color:#2a0c07; }
+  .item-badge{ display:inline-flex; align-items:center; gap:4px; font-size:0.7rem; padding:2px 7px; border-radius:6px; background:var(--surface-2); border:1px solid var(--line-strong); margin:1px 3px 1px 0; }
+  .item-badge.shipped{ background:var(--good-bg); color:var(--good); border-color:transparent; text-decoration:line-through; }
+
+  .data-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:12px 16px; }
+  .field-label{ font-size:0.64rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-faint); margin-bottom:3px; }
+  .field-value{ font-size:0.9rem; font-weight:600; }
+  select, input[type="text"]{ font-family:'Karla',sans-serif; font-size:0.84rem; padding:7px 10px; border-radius:8px; border:1px solid var(--line-strong); background:var(--surface); color:var(--ink); width:100%; box-sizing:border-box; }
+  input[type="checkbox"]{ width:16px; height:16px; }
+  label.f{ display:flex; flex-direction:column; gap:4px; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-faint); font-weight:700; }
+
+  .item-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .item-row:last-child{ border-bottom:none; }
+  .item-row .iname{ font-weight:700; font-size:0.86rem; min-width:170px; }
+  .item-row input[data-item-track]{ max-width:none; width:26ch; font-family:'IBM Plex Mono',monospace; }
+  .item-row input[data-item-date]{ max-width:120px; }
+  /* flex-wrap:wrap is harmless at desktop width — there's always enough
+     room there, so it never actually wraps; only narrow viewports need it,
+     confirmed real overflow: 712px of content in a 390px-wide detail
+     panel before this was added. */
+  .apply-all-box{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; padding:10px 12px; background:var(--surface-2); border:1px solid var(--accent); border-radius:10px; }
+  .apply-all-box input[type="text"]{ font-family:'IBM Plex Mono',monospace; }
+  .track-link{ font-size:0.72rem; color:var(--accent-2); text-decoration:none; white-space:nowrap; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(20,17,12,0.55); display:flex; align-items:flex-start; justify-content:center; padding:5vh 20px; overflow-y:auto; z-index:50; }
+  .modal{ background:var(--surface); border-radius:16px; border:1px solid var(--line); box-shadow:0 24px 60px -20px rgba(0,0,0,0.45); width:100%; max-width:760px; display:flex; flex-direction:column; }
+  .modal-head{ padding:18px 22px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .modal-head h3{ font-size:1.1rem; }
+  .modal-head p{ margin:4px 0 0; font-size:0.8rem; color:var(--ink-dim); }
+  .modal-close{ background:none; border:none; color:var(--ink-faint); font-size:1.3rem; cursor:pointer; line-height:1; padding:2px 6px; }
+  .modal-body{ padding:18px 22px; display:flex; flex-direction:column; gap:16px; max-height:70vh; overflow-y:auto; }
+  .modal-foot{ padding:16px 22px; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .summary-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .summary-item{ background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .summary-item .n{ font-family:'IBM Plex Mono',monospace; font-size:1.3rem; font-weight:600; }
+  .summary-item .l{ font-size:0.68rem; text-transform:uppercase; color:var(--ink-faint); letter-spacing:0.05em; }
+  .warning-banner{ display:flex; flex-direction:column; gap:8px; background:var(--warn-bg); color:var(--warn); border-radius:10px; padding:10px 12px; font-size:0.82rem; }
+  .warning-actions{ display:flex; gap:8px; }
+  .stamps-lock{ font-size:0.78rem; color:var(--good); font-weight:700; display:flex; align-items:center; gap:5px; }
+  .footnote{ font-size:0.76rem; color:var(--ink-faint); line-height:1.6; }
+  .bulkbar{ position:sticky; bottom:0; background:var(--surface); border:1px solid var(--accent); border-radius:12px; padding:10px 16px; display:flex; align-items:center; gap:12px; box-shadow:var(--shadow); }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <button class="wordmark" id="homeBtn"><span class="flag">📦</span><h1>Citytri Shipment Tracker</h1></button>
+    <span class="sub" id="crumbSub">Race merchandise shipment tracking</span>
+    <div class="topbar-spacer"></div>
+    <button class="btn ghost" id="toggleSidebarBtn" title="Show/hide the event sidebar">☰</button>
+    <button class="btn ghost" id="changeLibBtn" title="Change the library root folder">📁</button>
+  </header>
+  <div id="root"></div>
+</div>
+<div id="modalRoot"></div>
+
+<script>
+/* ================= date helpers ================= */
+// Folders are entirely user-named/created — there is no formula mapping a
+// master-calendar event to a folder. calendarEvents is only a reference list
+// for OPTIONALLY linking a folder to a known date (see .event-meta.json).
+let calendarEvents = [];
+let folders = [];
+const today = new Date(); today.setHours(0,0,0,0);
+function daysOut(dateStr){ return Math.round((new Date(dateStr) - today) / 86400000); }
+function hasOccurred(dateStr){ return new Date(dateStr) < today; }
+function nowLocal(){ return new Date().toLocaleString(undefined, { dateStyle:"short", timeStyle:"short" }); }
+function todayIso(){ return new Date().toISOString().slice(0,10); }
+
+/* ================= tiny helpers duplicated from lib/pipeline.js for display only ================= */
+// One tracking number on ANY item is enough to call the record SHIPPED — no
+// partial state. Matches lib/pipeline.js's computeRecordStatus (duplicated
+// here since the renderer can't require() a Node module).
+function computeRecordStatus(r){
+  return r.items.some(i=>i.trackingNumber) ? "SHIPPED" : "NOT STARTED";
+}
+function pillClass(s){ return s.replace(/ /g,"-"); }
+// A status that means a REAL shipment ran into a real problem after it
+// actually went out — not "Refunded" (that's a voided label that never
+// shipped at all, excluded upstream in mergeStampsHistory, never even
+// reaches an item) but a package that shipped and then came back or needs
+// the shipper's attention.
+const SHIPMENT_STATUS_NEEDS_REVIEW = ["undeliverable", "action required"];
+function needsShipmentReview(status){ return SHIPMENT_STATUS_NEEDS_REVIEW.includes(String(status||"").toLowerCase()); }
+function rankDisplay(v){ const n = Number(v); return Number.isFinite(n) && n>0 ? "#"+n : "—"; }
+function placingText(r){
+  if(r.mode!=="post-event") return `<span class="footnote">${esc(r.division)||"—"}</span>`;
+  const g = Number(r.rankGender), d = Number(r.rankDivision);
+  const isGenderTop3 = g>=1 && g<=3, isDivTop3 = d>=1 && d<=3;
+  return `<div style="font-size:0.82rem;">${esc(r.division)||"—"}</div>
+    <div class="footnote">Gender ${isGenderTop3?`<b style="color:var(--good);">${rankDisplay(g)}</b>`:rankDisplay(g)} · Div ${isDivTop3?`<b style="color:var(--good);">${rankDisplay(d)}</b>`:rankDisplay(d)} · Overall ${rankDisplay(r.rankOverall)}</div>`;
+}
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+// Recognized carrier tracking-number shapes — USPS (20-22 digit), UPS
+// (1Z + 16 alphanumeric), FedEx (12 or 15 digit). Anything else isn't a
+// real tracking number, hand-typed or not.
+function isValidTrackingNumber(s){
+  const n = String(s||"").replace(/\s+/g,"");
+  return /^\d{20,22}$/.test(n) || /^1Z[0-9A-Z]{16}$/.test(n) || /^\d{12}$/.test(n) || /^\d{15}$/.test(n);
+}
+function trackingCarrierUrl(s){
+  const n = String(s||"").replace(/\s+/g,"");
+  if(!isValidTrackingNumber(n)) return null;
+  // Stamps.com is the actual system of record for every label this app
+  // deals with — its own tracking-details lookup resolves reliably for
+  // labels it generated. The carrier's own public tracking page (USPS's
+  // especially) can fail on the exact same number — confirmed directly,
+  // 2026-09-16 — so route through Stamps instead of guessing per carrier.
+  return `https://www.stamps.com/tracking-details/?t=${encodeURIComponent(n)}`;
+}
+function trackButton(num){
+  const url = trackingCarrierUrl(num);
+  // Text label, not an emoji/icon-only glyph — the packaged app doesn't
+  // reliably render color emoji, so an icon-only button can end up
+  // showing as an unrecognizable dot instead of a clickable control.
+  return url ? `<button class="btn ghost small" data-track-url="${esc(url)}" title="Open Stamps tracking details">Track</button>` : "";
+}
+
+/* ================= state ================= */
+let appVersion = ""; // fetched once at boot; shown in the top bar instead of the event name (already shown in the sidebar — redundant to repeat it)
+let sidebarCollapsed = false; // in-memory only, like RaceResult's pin toggle — always starts expanded on a fresh launch
+let settings = {};
+let currentEvent = null;      // { name, folderPath, meta:{date?,calendarNum?,label?} }
+let mode = "pre-event";       // active tab within the event workspace
+let records = [];             // records for the CURRENT event (both modes, filtered client-side)
+let logEntries = [];
+let batches = [];
+let sourceFiles = [];         // CSVs found in the current event's source-files/ folder
+let stampsContacts = [];      // this event's Stamps Contacts file (what was actually uploaded to Stamps) — used as a name+address fallback when matching Stamps history
+let selected = new Set();     // selected record bibs (within current mode's table)
+let selectedId = null;        // bib of record shown in detail panel
+let detailUnassignedEntries = null; // real Stamps history entries found for the currently-open record, not yet assigned to an item
+let addressEditUnlocked = false; // "Edit anyway" override for the currently-open record's STAMPS-validated address; resets when selection changes
+let addressWarningOpen = false;
+let filterStatuses = new Set(); // empty = "All" — otherwise stacked, ANDed together
+let filterRaces = new Set();  // distance/race filter (multi-select) — empty = all distances
+let searchQuery = "";         // committed search filter (applied to the table)
+let searchDraft = "";         // what's currently typed, not yet applied — search only runs on Enter/click
+let modalState = null;
+
+let screen = "setup";         // setup | home | dashboard | stampsHistory
+let stampsHistoryDateGroups = []; // [{date,total,unassigned}], library-level, spans all events
+let stampsHistory = [];       // full history entries, loaded once per Stamps History screen visit — used to preview a date's labels before assigning
+let stampsHistoryLastImport = null; // {added,duplicate,skippedNoTracking,sourceRowCount} — just for the "what happened" banner
+
+const rootEl = document.getElementById("root");
+const modalRootEl = document.getElementById("modalRoot");
+
+async function boot(){
+  appVersion = await window.shipAPI.getAppVersion();
+  settings = await window.shipAPI.loadSettings();
+  calendarEvents = await window.shipAPI.listCalendarEvents();
+  if(!settings.libraryRoot){ screen = "setup"; render(); return; }
+  folders = await window.shipAPI.listEventFolders();
+  // You work one event at a time — reopen straight into the last one instead
+  // of making you re-pick from the full calendar every launch.
+  const last = settings.lastOpenedFolder && folders.find(f=>f.name===settings.lastOpenedFolder);
+  if(last){ await openFolderEntry(last); return; }
+  screen = "home";
+  render();
+}
+
+async function pickLibrary(){
+  const root = await window.shipAPI.pickLibraryRoot();
+  if(!root) return;
+  settings.libraryRoot = root;
+  folders = await window.shipAPI.listEventFolders();
+  screen = "home";
+  render();
+}
+
+async function createFolderPrompt(){
+  const name = prompt("Name for the new event folder (e.g. \"34 - Some New Race\"):");
+  if(!name || !name.trim()) return;
+  await window.shipAPI.createEventFolder(name.trim());
+  folders = await window.shipAPI.listEventFolders();
+  render();
+}
+
+async function openFolderEntry(folder){
+  currentEvent = { ...folder, meta: await window.shipAPI.loadFolderMeta(folder.folderPath) };
+  mode = currentEvent.meta.date ? (hasOccurred(currentEvent.meta.date) ? "post-event" : "pre-event") : "pre-event";
+  await refreshEventData();
+  window.shipAPI.setLastFolder(folder.name);
+  screen = "dashboard";
+  selected = new Set(); selectedId = null;
+  render();
+}
+
+async function linkCalendarEvent(num){
+  const ce = calendarEvents.find(e=>e.num===Number(num));
+  currentEvent.meta = ce ? { date: ce.date, calendarNum: ce.num, calendarName: ce.active||ce.rsu } : {};
+  await window.shipAPI.saveFolderMeta(currentEvent.folderPath, currentEvent.meta);
+  mode = currentEvent.meta.date ? (hasOccurred(currentEvent.meta.date) ? "post-event" : "pre-event") : mode;
+  render();
+}
+
+async function refreshEventData(){
+  records = await window.shipAPI.loadRecords(currentEvent.folderPath);
+  logEntries = await window.shipAPI.loadLog(currentEvent.folderPath);
+  batches = await window.shipAPI.loadBatches(currentEvent.folderPath);
+  sourceFiles = await window.shipAPI.listSourceFiles(currentEvent.folderPath);
+  stampsContacts = await window.shipAPI.loadStampsContacts(currentEvent.folderPath);
+}
+
+function isStampsHistoryFile(filename){
+  return /^PrintHistory[_-]/i.test(filename.replace(/\.[^.]+$/,""));
+}
+function detectModeHint(filename){
+  const base = filename.replace(/\.[^.]+$/,"");
+  if(/^Start list_BIB_Download/i.test(base)) return "→ Pre-Event";
+  if(/^ActiveResults_TShirt_address.*_Cleaned$/i.test(base)) return "→ Post-Event";
+  if(/^ActiveResults_TShirt_address/i.test(base)) return "⚠ uncleaned — will be rejected";
+  if(isStampsHistoryFile(filename)) return "→ Stamps History (shared across every event, not just this one)";
+  return "unrecognized filename";
+}
+
+async function loadContactsFile(){
+  const filePath = await window.shipAPI.pickAnyFile("Select this event's Stamps Contacts CSV");
+  if(!filePath) return false;
+  const preview = await window.shipAPI.importStampsContactsFile(currentEvent.folderPath, filePath, false);
+  const bibRate = preview.count ? preview.withBib/preview.count : 0;
+  if(bibRate < 0.5){
+    const proceed = confirm(`This doesn't look like a Stamps Contacts file: only ${preview.withBib} of ${preview.count} rows have a usable BIB. Did you pick the right file?\n\nLoad it anyway?`);
+    if(!proceed) return false;
+  }
+  const res = await window.shipAPI.importStampsContactsFile(currentEvent.folderPath, filePath, true);
+  stampsContacts = await window.shipAPI.loadStampsContacts(currentEvent.folderPath);
+  currentEvent.meta = { ...currentEvent.meta, contactsImportedAt: new Date().toISOString() };
+  await window.shipAPI.saveFolderMeta(currentEvent.folderPath, currentEvent.meta);
+  await logAudit("stamps-contacts-loaded", { count: res.count, withBib: res.withBib });
+  render();
+  alert(`Loaded ${res.count} Stamps Contacts (${res.withBib} with a usable BIB).`);
+  return true;
+}
+
+async function persistRecords(){ await window.shipAPI.saveRecords(currentEvent.folderPath, records); }
+async function persistBatches(){ await window.shipAPI.saveBatches(currentEvent.folderPath, batches); }
+
+// Golden rule, direct instruction: "DATA MODIFICATIONS LIVE IN THE LOGS.
+// LOGS ARE THE LAW." Every action that changes persisted data calls this.
+async function logAudit(type, detail){
+  await window.shipAPI.appendAudit(currentEvent.folderPath, { at: new Date().toISOString(), type, mode, ...detail });
+}
+
+function modeRecords(){ return records.filter(r=>r.mode===mode); }
+function availableRaces(){ return [...new Set(modeRecords().map(r=>r.race).filter(Boolean))].sort(); }
+// Real freeze found on real data (411 records): emailGroupSize used to
+// re-filter the full record list on every single call, and groupColor
+// called it ONCE PER RECORD inside its own filter — an accidental O(n^2)
+// cost per call to groupColor, which itself is called ~3x per row. That's
+// ~200 million redundant operations for one render, enough to hang the app
+// solid. Fixed by building the email -> count map exactly ONCE per render
+// (invalidated in render(), see below) and having every group-related
+// helper do an O(1) lookup into it instead of re-scanning every time.
+let _groupIndexCache = null;
+function getGroupIndex(){
+  if(_groupIndexCache) return _groupIndexCache;
+  const counts = new Map();
+  for(const r of records){
+    if(r.mode!==mode) continue;
+    const e = (r.email||"").toLowerCase();
+    if(!e) continue;
+    counts.set(e, (counts.get(e)||0)+1);
+  }
+  _groupIndexCache = counts;
+  return counts;
+}
+// How many OTHER records (same mode) share this email — the point is
+// spotting a family so their items can be shipped together, not flagging
+// a data error. A blank email never counts as a "group."
+function emailGroupSize(email){
+  if(!email) return 1;
+  return getGroupIndex().get(email.toLowerCase()) || 1;
+}
+// 16 deliberately-spread hues, not a raw hash — a plain hash-mod-360 let two
+// unrelated families land on the same or near-same color purely by chance
+// once a real event had more than a handful of groups (confirmed on real
+// data: two different families both landed on the same blue). Assigning
+// from a fixed palette, in a stable sorted order across every group
+// currently in view, guarantees no two groups share a color until every
+// slot in the palette is used at least twice. Built once per render (see
+// _groupIndexCache above), not recomputed per row.
+const GROUP_COLOR_PALETTE = ["#E63946","#457B9D","#2A9D8F","#E9C46A","#F4A261","#8E44AD","#06A77D","#D62828","#3A86FF","#FB5607","#8338EC","#43AA8B","#FF006E","#219EBC","#FFB703","#6A4C93"];
+let _groupColorMapCache = null;
+function getGroupColorMap(){
+  if(_groupColorMapCache) return _groupColorMapCache;
+  const groupedEmails = [...getGroupIndex().entries()].filter(([,c])=>c>1).map(([e])=>e).sort();
+  const map = new Map();
+  groupedEmails.forEach((e,i) => map.set(e, GROUP_COLOR_PALETTE[i % GROUP_COLOR_PALETTE.length]));
+  _groupColorMapCache = map;
+  return map;
+}
+function groupColor(email){
+  if(!email || emailGroupSize(email)<=1) return null;
+  return getGroupColorMap().get(email.toLowerCase()) || null;
+}
+// Ported from Waiver_Audit_7.py's primary_name_score/assign_primary_flags —
+// same scoring, same "never guess when it's a tie" rule. Adults only.
+function normalizedNamePart(v){ return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,""); }
+function primaryNameScore(person, email){
+  const localPart = normalizedNamePart((email||"").split("@")[0]);
+  const first = normalizedNamePart(person.firstName), last = normalizedNamePart(person.lastName);
+  if(!localPart) return 0;
+  let score = 0;
+  if(first && last && (localPart.includes(first+last) || localPart.includes(last+first))) score += 20;
+  if(first.length>=4 && localPart.includes(first)) score += 8;
+  else if(first.length>=3 && localPart.includes(first.slice(0,3))) score += 2;
+  if(last.length>=4 && localPart.includes(last)) score += 8;
+  else if(last.length>=3 && localPart.includes(last.slice(0,3))) score += 3;
+  if(first && last && localPart.includes(first[0]+last)) score += 6;
+  return score;
+}
+function emailGroupRecords(email){
+  if(!email) return [];
+  const e = email.toLowerCase();
+  return modeRecords().filter(r=>(r.email||"").toLowerCase()===e);
+}
+// Unambiguous auto-detection only — a lone adult wins automatically, a
+// clear best-scoring adult wins, a tie or zero score picks nobody.
+function autoDetectedPrimaryBib(email){
+  const group = emailGroupRecords(email);
+  const adults = group.filter(r=>Number(r.age)>=18);
+  if(adults.length===1) return adults[0].bib;
+  if(adults.length<=1) return null;
+  const scored = adults.map(r=>({bib:r.bib, score:primaryNameScore(r, email)}));
+  const best = Math.max(...scored.map(s=>s.score));
+  const bestOnes = scored.filter(s=>s.score===best);
+  return (best>0 && bestOnes.length===1) ? bestOnes[0].bib : null;
+}
+// Manual override always wins over auto-detection.
+function effectivePrimaryBib(email){
+  const group = emailGroupRecords(email);
+  const manual = group.find(r=>r.isGroupPrimary===true);
+  return manual ? manual.bib : autoDetectedPrimaryBib(email);
+}
+async function setGroupPrimary(bib){
+  const target = records.find(r=>r.bib===bib && r.mode===mode);
+  const email = (target?.email||"").toLowerCase();
+  if(!email) return;
+  for(const r of emailGroupRecords(email)) r.isGroupPrimary = (r.bib===bib);
+  await persistRecords();
+  await logAudit("group-primary-set", { bib, email });
+  render();
+}
+async function unsetGroupPrimary(bib){
+  const r = records.find(x=>x.bib===bib && x.mode===mode);
+  if(r) r.isGroupPrimary = false;
+  await persistRecords();
+  await logAudit("group-primary-unset", { bib });
+  render();
+}
+function visibleRecords(){
+  let list = modeRecords();
+  if(filterRaces.size) list = list.filter(r=>filterRaces.has(r.race));
+  // Stacked status chips — every checked one must hold (AND), not just any one.
+  if(filterStatuses.has("ready")) list = list.filter(r=>r.addressStatus==="READY");
+  if(filterStatuses.has("addressRequired")) list = list.filter(r=>r.addressStatus==="MISSING ADDRESS");
+  if(filterStatuses.has("addressReview")) list = list.filter(r=>r.addressStatus==="ADDRESS REVIEW REQUIRED");
+  if(filterStatuses.has("shipped")) list = list.filter(r=>computeRecordStatus(r)==="SHIPPED");
+  if(filterStatuses.has("notStarted")) list = list.filter(r=>computeRecordStatus(r)==="NOT STARTED");
+  if(filterStatuses.has("top3")) list = list.filter(r=>r.items.some(i=>i.name.includes("Award")));
+  if(filterStatuses.has("validated")) list = list.filter(r=>r.stampsValidated);
+  if(filterStatuses.has("grouped")) list = list.filter(r=>emailGroupSize(r.email)>1);
+  if(searchQuery.trim()){
+    const q = searchQuery.trim().toLowerCase();
+    list = list.filter(r => r.bib.toLowerCase().includes(q) || `${r.firstName} ${r.lastName}`.toLowerCase().includes(q) || (r.email||"").toLowerCase().includes(q));
+  }
+  // Grouped-by-email records are forced to the top, ahead of everything
+  // else — the point is deciding whether to ship a family's items as one
+  // combined package, so those rows need to be seen first, not buried
+  // alphabetically among hundreds of unrelated singles. Within a group, the
+  // Primary (if one's set) leads, then the rest of that family by last name.
+  list = [...list].sort((a,b) => {
+    const ga = emailGroupSize(a.email) > 1 ? 0 : 1, gb = emailGroupSize(b.email) > 1 ? 0 : 1;
+    if(ga !== gb) return ga - gb;
+    const ea = (a.email||"").toLowerCase(), eb = (b.email||"").toLowerCase();
+    if(!ea && !eb) return (a.lastName||"").localeCompare(b.lastName||"");
+    if(!ea) return 1;
+    if(!eb) return -1;
+    if(ea !== eb) return ea.localeCompare(eb);
+    const pa = effectivePrimaryBib(a.email)===a.bib ? 0 : 1, pb = effectivePrimaryBib(b.email)===b.bib ? 0 : 1;
+    if(pa !== pb) return pa - pb;
+    return (a.lastName||"").localeCompare(b.lastName||"");
+  });
+  return list;
+}
+
+/* ================= render dispatch ================= */
+function render(){
+  // Fresh group-index/color computation exactly once for this render pass
+  // — see getGroupIndex/getGroupColorMap above. Must be invalidated here,
+  // not left stale across renders, since records/mode can change.
+  _groupIndexCache = null;
+  _groupColorMapCache = null;
+  // Full innerHTML re-render (same idiom as Startline) loses focus/cursor
+  // position on every keystroke for any live-typing input (search box) unless
+  // explicitly restored — save it before redrawing, restore it after.
+  const active = document.activeElement;
+  const activeId = active && active.id;
+  const selStart = active && typeof active.selectionStart === "number" ? active.selectionStart : null;
+  const selEnd = active && typeof active.selectionEnd === "number" ? active.selectionEnd : null;
+  // Same problem as focus: replacing .main's innerHTML resets its scroll to
+  // the top on every render — so clicking a row far down a long table threw
+  // the operator back to row 1. Capture and restore it like focus above.
+  const mainEl = document.querySelector(".main");
+  const mainScrollTop = mainEl ? mainEl.scrollTop : 0;
+
+  document.getElementById("crumbSub").textContent = appVersion ? `v${appVersion}` : "Race merchandise shipment tracking";
+  // The sidebar only exists on the event workspace screen — the toggle is
+  // meaningless (and hidden) anywhere else, same as the user's own framing:
+  // "the sidebar is event specific."
+  document.getElementById("toggleSidebarBtn").style.display = (screen==="dashboard" && currentEvent) ? "" : "none";
+  if(screen==="setup") rootEl.innerHTML = renderSetup();
+  else if(screen==="home") rootEl.innerHTML = renderHome();
+  else if(screen==="stampsHistory") rootEl.innerHTML = renderStampsHistoryScreen();
+  else rootEl.innerHTML = renderDashboard();
+  bindShellEvents();
+  modalRootEl.innerHTML = modalState ? renderModal() : "";
+  if(modalState) bindModalEvents();
+
+  const newMainEl = document.querySelector(".main");
+  if(newMainEl) newMainEl.scrollTop = mainScrollTop;
+
+  if(activeId){
+    const el = document.getElementById(activeId);
+    if(el){
+      el.focus();
+      if(selStart!==null && el.setSelectionRange){ try{ el.setSelectionRange(selStart, selEnd); }catch{} }
+    }
+  }
+}
+
+/* ================= setup ================= */
+function renderSetup(){
+  return `<div class="setup-screen"><div class="setup-card">
+    <h2 style="font-size:1.6rem;">Choose a library folder</h2>
+    <p class="footnote">This is where per-event shipment data will live — one subfolder per event, next to a <code>source-files</code> folder where you drop the Start List / ActiveResults CSVs. Pick an existing folder or create a new one.</p>
+    <button class="btn primary" id="pickLibBtn">📁 Choose folder</button>
+  </div></div>`;
+}
+
+/* ================= home / event picker ================= */
+function renderHome(){
+  return `<div class="home">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="font-size:1.6rem;">Event folders</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost small" id="populateBtn">📅 Create folders for all calendar events</button>
+        <button class="btn primary small" id="newFolderBtn">＋ New event folder</button>
+      </div>
+    </div>
+    <div class="footnote">${esc(settings.libraryRoot)} — source CSVs go in each event's <code>source-files/</code>, generated CSVs land in <code>exports/</code>, app run logs in <code>logs/</code>.</div>
+    <div class="event-list">${folders.map(f => {
+      const m = /^(\d+)\s*-\s*(.+?)(?:\s*-\s*(\d{4}-\d{2}-\d{2}))?$/.exec(f.name);
+      const dataBadge = [
+        f.preEventCount>0 ? `<span class="status-pill READY" style="margin-right:6px;">Pre-Event: ${f.preEventCount}</span>` : `<span class="status-pill ADDRESS-REQUIRED" style="margin-right:6px;">Pre-Event: not imported</span>`,
+        f.postEventCount>0 ? `<span class="status-pill READY" style="margin-right:6px;">Post-Event: ${f.postEventCount}</span>` : `<span class="status-pill ADDRESS-REQUIRED" style="margin-right:6px;">Post-Event: not imported</span>`,
+        f.sourceFileCount>0 && f.recordCount===0 ? `<span class="footnote">(${f.sourceFileCount} file(s) waiting in source-files/)</span>` : "",
+      ].join("");
+      return `<button class="event-row" data-open="${esc(f.name)}">
+        <span class="num">${m?esc(m[1]):""}</span>
+        <span class="name">${esc(m?m[2]:f.name)}</span>
+        ${dataBadge}
+        <span class="meta">${m&&m[3]?m[3]:""}</span>
+      </button>`;
+    }).join("") || `<div class="footnote" style="padding:16px;">No event folders yet — create one to get started.</div>`}</div>
+  </div>`;
+}
+
+/* ================= dashboard (event workspace) ================= */
+function renderDashboard(){
+  const mr = modeRecords();
+  const validatedCount = mr.filter(r=>r.stampsValidated).length;
+  const reqCount = mr.filter(r=>r.addressStatus==="MISSING ADDRESS").length;
+  const reviewCount = mr.filter(r=>r.addressStatus==="ADDRESS REVIEW REQUIRED").length;
+  const shippedCount = mr.filter(r=>computeRecordStatus(r)==="SHIPPED").length;
+  const meta = currentEvent.meta || {};
+  const dateLine = meta.date
+    ? `${meta.date} (${hasOccurred(meta.date)?"already occurred":daysOut(meta.date)+" days out"})${meta.calendarName?` — linked to "${esc(meta.calendarName)}"`:""}`
+    : `no date linked`;
+
+  return `
+  <div class="layout ${sidebarCollapsed?"sidebar-collapsed":""}">
+    <aside class="sidebar">
+      <div>
+        <h3 style="font-size:1rem;line-height:1.3;">${esc(currentEvent.name)}</h3>
+        <div class="footnote" style="margin-top:4px;">${dateLine}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn ghost small" id="backHomeBtn">← All events</button>
+        <button class="btn ghost small" id="linkCalendarBtn">📅 Calendar</button>
+        <button class="btn ghost small" id="openFolderBtn">📁 Folder</button>
+      </div>
+      <div class="footnote" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Shipping: <b style="color:var(--ink);">${meta.shippingClosed?"CLOSED":"OPEN"}</b> — ${meta.shippingClosed?"excluded from":"a candidate for"} Stamps History auto-matching</span>
+        <button class="btn ghost small" id="toggleShippingClosedBtn">${meta.shippingClosed?"Reopen":"Mark closed"}</button>
+      </div>
+      <div class="chip-row">
+        <button class="chip ${mode==="pre-event"?"active":""}" data-mode="pre-event">Pre-Event</button>
+        <button class="chip ${mode==="post-event"?"active":""}" data-mode="post-event">Post-Event</button>
+      </div>
+
+      <div class="sidebar-status-workflow">
+      <div class="filter-group">
+        <div class="filter-label" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Status — ${mode}</span>
+          <button class="btn ghost small" id="refreshAllBtn" title="Reload records/log/batches/source-files from disk">🔄 Refresh</button>
+        </div>
+        <div class="card" style="box-shadow:none;">
+          <div class="card-body" style="padding:10px 12px;display:flex;flex-direction:column;gap:7px;font-size:0.82rem;">
+            <div style="display:flex;justify-content:space-between;"><span>Records</span><b class="mono">${mr.length}</b></div>
+            <div style="display:flex;justify-content:space-between;"><span>STAMPS Validated</span><b class="mono">${validatedCount}</b></div>
+            <div style="display:flex;justify-content:space-between;"><span>Missing address</span><b class="mono">${reqCount}</b></div>
+            <div style="display:flex;justify-content:space-between;"><span>Review required</span><b class="mono">${reviewCount}</b></div>
+            <div style="display:flex;justify-content:space-between;"><span>Shipped</span><b class="mono">${shippedCount}</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-group" style="display:flex;flex-direction:column;gap:6px;">
+        <div class="filter-label">Workflow</div>
+        <button class="action-card" id="openValidate" style="padding:8px 12px;gap:2px;"><span class="title" style="font-size:0.88rem;">1 · Validate Addresses</span></button>
+        <button class="action-card" id="loadContactsBtn" style="padding:8px 12px;gap:2px;" title="${stampsContacts.length ? `${stampsContacts.length} loaded` : "None loaded yet"} — powers name+address matching when a label's BIB can't be read directly. Load before importing Stamps history for the best match rate."><span class="title" style="font-size:0.88rem;">2 · Load Stamps Contacts ${stampsContacts.length?`<span class="footnote" style="font-weight:400;">(${stampsContacts.length} loaded)</span>`:""}</span></button>
+        <button class="action-card" id="openTrack" style="padding:8px 12px;gap:2px;"><span class="title" style="font-size:0.88rem;">3 · Update Shipment Status</span></button>
+      </div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="card">
+        <div class="card-head">
+          <h3>Files in <code>source-files/</code></h3>
+          <button class="btn ghost small" id="refreshSourceFilesBtn">🔄 Refresh file list</button>
+        </div>
+        <div class="card-body" style="padding-top:10px;padding-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          ${(()=>{ const relevant = sourceFiles.filter(f => mode==="pre-event" ? /^Start list_BIB_Download/i.test(f.name) : /^ActiveResults_TShirt_address/i.test(f.name));
+            return relevant.length ? relevant.map(f=>`
+              <span class="iname" style="min-width:auto;">${esc(f.name)}</span>
+              <span class="footnote">${detectModeHint(f.name)}</span>
+              <button class="btn small primary" data-import-file="${esc(f.name)}">⬆ Import</button>`).join("") : `<span class="footnote" title='Drop the CSV into this event\\'s source-files folder (use "📁 Folder" in the sidebar), then hit Refresh.'>Expecting ${mode==="pre-event"?"Start list_BIB_Download*.csv":"ActiveResults_TShirt_address*_Cleaned.csv"} — nothing here yet.</span>`; })()}
+          <span style="width:1px;height:20px;background:var(--line);"></span>
+          <button class="btn ghost small" id="browseElsewhereBtn">Browse elsewhere…</button>
+          <button class="btn ghost small" id="exportLogBtn" title="Export exception log CSV">⬇ Exception log</button>
+          <button class="btn ghost small" id="exportAuditBtn" title="Export audit log CSV">⬇ Audit log</button>
+          <button class="btn primary small" id="exportShipmentReportBtn" title="Export shipment report (print/warehouse)">🖨 Shipment report</button>
+        </div>
+      </div>
+
+      ${renderRecordsTable()}
+    </div>
+  </div>`;
+}
+
+function renderRecordsTable(){
+  const list = visibleRecords();
+  const filters = [
+    ["all","All"], ["grouped","Grouped (shares an email with another runner)"], ["top3","Top 3 Only"],
+    ["ready","Address Ready (has a complete address)"], ["validated","STAMPS Validated (confirmed good to ship)"],
+    ["addressRequired","Missing Address"], ["addressReview","Review Required"],
+    ["shipped","Shipped (has a tracking number on at least one item)"],
+    ["notStarted","Not Started (nothing shipped yet)"],
+  ];
+  const races = availableRaces();
+  const allVisibleSelected = list.length>0 && list.every(r=>selected.has(r.bib));
+  return `
+  <div class="card">
+    <div class="card-head records-filter-head" style="flex-direction:column;align-items:stretch;gap:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <h3 style="white-space:nowrap;">Records — ${mode}</h3>
+        <input type="text" id="searchInput" placeholder="Search BIB or name…" value="${esc(searchDraft)}" style="max-width:200px;">
+        <button class="btn ghost small" id="searchGoBtn">🔎 Search</button>
+        ${searchQuery ? `<button class="btn ghost small" id="searchClearBtn">✕ Clear (${esc(searchQuery)})</button>` : ""}
+        <div class="chip-row">${filters.map(([k,l])=>`<button class="chip ${(k==="all"?filterStatuses.size===0:filterStatuses.has(k))?"active":""}" data-filter="${k}" title="${esc(l)}">${l.split(" (")[0]}</button>`).join("")}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        ${races.length>1 ? `<div class="chip-row"><span class="footnote" style="align-self:center;margin-right:4px;">Distance:</span>${races.map(r=>`<button class="chip ${filterRaces.has(r)?"active":""}" data-race="${esc(r)}">${esc(r)}</button>`).join("")}${filterRaces.size?`<button class="chip" data-race-clear="1">Clear</button>`:""}</div>` : "<div></div>"}
+        <span class="footnote">Showing <b>${list.length}</b> of ${modeRecords().length}${filterStatuses.size?` · ${filterStatuses.size} filter(s) stacked`:""}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn ghost small" id="bulkValidateReadyBtn">✓ Mark all Address-Ready as STAMPS Validated</button>
+        <span class="footnote" title="Checkbox = select for a bulk action below. Click anywhere else on a row to open/edit that person's details. &quot;STAMPS Validated&quot; is your own confirmation that an address is good to ship — this app doesn't call Stamps.com automatically, so mark records validated (one at a time, or in bulk here) once you're satisfied.">ℹ Checkbox = bulk-select · click a row to edit · "Validated" is your own confirmation, not a live Stamps.com check</span>
+      </div>
+      <div class="records-table-view" style="overflow-x:auto;">
+      <table class="rt">
+        <thead><tr><th><input type="checkbox" id="selectAllCb" ${allVisibleSelected?"checked":""} title="Select all visible rows"></th><th>BIB</th><th>Name</th><th>Placing</th><th>Items</th><th title="From the Validate Addresses flow">Address</th><th title="From the Update Shipment Status flow">Shipment Status</th><th>Email</th></tr></thead>
+        <tbody>
+        ${list.map(r=>`
+          <tr class="${selectedId===r.bib?"selected":""}" data-row="${r.bib}">
+            <td ${groupColor(r.email)?`style="background: linear-gradient(to right, ${groupColor(r.email)} 0 3px, color-mix(in srgb, ${groupColor(r.email)} 35%, transparent) 3px 6px, transparent 6px 100%);"`:""}><input type="checkbox" data-select="${r.bib}" ${selected.has(r.bib)?"checked":""}></td>
+            <td class="mono">${esc(r.bib)}</td>
+            <td>${esc(r.lastName)}, ${esc(r.firstName)} ${emailGroupSize(r.email)>1?(effectivePrimaryBib(r.email)===r.bib?`<span class="status-pill READY" style="background:${groupColor(r.email)};color:#fff;" title="Primary contact for this group of ${emailGroupSize(r.email)}">Primary ×${emailGroupSize(r.email)}</span>`:`<span class="item-badge" style="border-color:${groupColor(r.email)};color:${groupColor(r.email)};" title="${emailGroupSize(r.email)} runners share this email — candidates to ship together">Group ×${emailGroupSize(r.email)}</span>`):""}</td>
+            <td>${placingText(r)}</td>
+            <td>${r.items.map(i=>`<span class="item-badge ${i.trackingNumber?"shipped":""}" ${needsShipmentReview(i.shipmentStatus)?`style="border-color:var(--bad);"`:""}>${esc(i.name)}${i.delivered?" ✓":""}${needsShipmentReview(i.shipmentStatus)?` <span title="Stamps status: ${esc(i.shipmentStatus)} — needs review">⚠️ ${esc(i.shipmentStatus)}</span>`:""}</span>`).join("")}</td>
+            <td><span class="status-pill ${pillClass(r.addressStatus)}">${r.addressStatus}</span></td>
+            <td><span class="status-pill ${pillClass(computeRecordStatus(r))}">${computeRecordStatus(r)}</span></td>
+            <td class="footnote">${esc(r.email)||"—"} ${emailGroupSize(r.email)>1?`<span class="item-badge" style="border-color:${groupColor(r.email)};color:${groupColor(r.email)};" title="${emailGroupSize(r.email)} runners share this email">×${emailGroupSize(r.email)}</span>`:""}</td>
+          </tr>
+          ${selectedId===r.bib ? `<tr class="detail-row"><td colspan="8" style="background:var(--surface-2);padding:16px 18px;">${renderDetailPanel(r)}</td></tr>` : ""}`).join("") || (modeRecords().length ? `<tr><td colspan="8" class="footnote" style="padding:16px;">No records match the current filters.</td></tr>` : `<tr><td colspan="8" class="footnote" style="padding:16px;">No records yet — import a source CSV above.</td></tr>`)}
+        </tbody>
+      </table>
+      </div>
+      <!-- Mobile-only card view — same data, same data-row/data-select
+           attributes as the table above, so the existing click handlers
+           (document.querySelectorAll("[data-row]")/("[data-select]")) bind
+           to both with zero new JS. CSS alone decides which is visible;
+           both are always rendered. Per protocol: "Do not display the
+           desktop records table on mobile" / "Do not treat horizontal
+           scrolling as an acceptable responsive solution" — the table's
+           own columns don't fit a phone width without exactly that. -->
+      <div class="records-card-view">
+        ${list.map(r=>`
+          <div class="record-card ${selectedId===r.bib?"open":""}" data-row="${r.bib}" ${groupColor(r.email)?`style="border-left-color:${groupColor(r.email)};"`:""}>
+            <div class="record-card-head">
+              <input type="checkbox" data-select="${r.bib}" ${selected.has(r.bib)?"checked":""}>
+              <span class="mono">${esc(r.bib)}</span>
+              <span class="record-card-name">${esc(r.lastName)}, ${esc(r.firstName)}</span>
+              <span class="record-card-chevron">${selectedId===r.bib?"▲":"▼"}</span>
+            </div>
+            ${emailGroupSize(r.email)>1?`<div>${effectivePrimaryBib(r.email)===r.bib?`<span class="status-pill READY" style="background:${groupColor(r.email)};color:#fff;">Primary ×${emailGroupSize(r.email)}</span>`:`<span class="item-badge" style="border-color:${groupColor(r.email)};color:${groupColor(r.email)};">Group ×${emailGroupSize(r.email)}</span>`}</div>`:""}
+            <div>${placingText(r)}</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">${r.items.map(i=>`<span class="item-badge ${i.trackingNumber?"shipped":""}" ${needsShipmentReview(i.shipmentStatus)?`style="border-color:var(--bad);"`:""}>${esc(i.name)}${i.delivered?" ✓":""}${needsShipmentReview(i.shipmentStatus)?" ⚠️":""}</span>`).join("")}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="status-pill ${pillClass(r.addressStatus)}">${r.addressStatus}</span>
+              <span class="status-pill ${pillClass(computeRecordStatus(r))}">${computeRecordStatus(r)}</span>
+            </div>
+          </div>
+          ${selectedId===r.bib ? `<div class="record-card-detail">${renderDetailPanel(r)}</div>` : ""}`).join("") || (modeRecords().length ? `<div class="footnote" style="padding:16px;">No records match the current filters.</div>` : `<div class="footnote" style="padding:16px;">No records yet — import a source CSV above.</div>`)}
+      </div>
+      ${selected.size ? `<div class="bulkbar" style="margin-top:12px;">
+        <span class="footnote">${selected.size} selected</span>
+        <button class="btn small primary" id="bulkNotifyBtn">✉ Notify selected (shipped items)</button>
+        <button class="btn small ghost" id="bulkMarkValidatedBtn">✓ Mark selected STAMPS Validated</button>
+        <button class="btn small ghost" id="bulkManualShipBtn">📦 Apply a tracking number to selected</button>
+        <button class="btn small ghost" id="bulkClearBtn">Clear</button>
+      </div>` : ""}
+    </div>
+  </div>`;
+}
+
+function renderDetailPanel(r){
+  const a = r.address;
+  return `
+  <div style="display:flex;flex-direction:column;gap:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="font-size:1rem;">${esc(r.firstName)} ${esc(r.lastName)} — BIB ${esc(r.bib)}</h3>
+      <button class="btn ghost small" id="closeDetailBtn">Close</button>
+    </div>
+      <div class="data-grid">
+        <div><div class="field-label">Gender</div><div class="field-value">${esc(r.gender)||"—"}</div></div>
+        <div><div class="field-label">Age</div><div class="field-value">${esc(r.age)||"—"}</div></div>
+        <div><div class="field-label">Division</div><div class="field-value">${esc(r.division)||"—"}</div></div>
+        <div><div class="field-label">Race</div><div class="field-value">${esc(r.race)||"—"}</div></div>
+        <div><div class="field-label">T-Shirt Size</div>${r.items.find(i=>i.name==="T-Shirt") ? `<input type="text" id="tshirtSizeInput" value="${esc(r.items.find(i=>i.name==="T-Shirt").size)}" style="max-width:120px;">` : `<div class="field-value">—</div>`}</div>
+        ${r.mode==="post-event" ? `
+        <div><div class="field-label">Final Result</div><div class="field-value">${esc(r.finalResult)||"—"}</div></div>
+        <div><div class="field-label">Rank Gender</div><div class="field-value">${esc(r.rankGender)||"—"}</div></div>
+        <div><div class="field-label">Rank Division</div><div class="field-value">${esc(r.rankDivision)||"—"}</div></div>` : ""}
+      </div>
+
+      ${(() => {
+        const labelAddr = r.items.map(i=>i.labelAddress).find(a=>a && (a.street||a.city));
+        if(!labelAddr) return "";
+        return `<div class="warning-banner" style="background:var(--good-bg);border-color:transparent;">
+          <div><b>Confirmed by Stamps label</b> — this is the current address of record, ranked above whatever was originally submitted below:<br>
+          ${esc(labelAddr.street)}, ${esc(labelAddr.city)}, ${esc(labelAddr.state)} ${esc(labelAddr.zip)}</div>
+        </div>`;
+      })()}
+      <div>
+        <div class="field-label" style="margin-bottom:8px;">Address as originally submitted <span class="status-pill ${pillClass(r.addressStatus)}">${r.addressStatus}</span> ${r.stampsValidated?`<span class="status-pill READY">STAMPS VALIDATED</span>`:""}</div>
+        ${r.addressReviewReason ? `<div class="footnote" style="margin-bottom:6px;">${esc(r.addressReviewReason)}</div>` : ""}
+        ${a.raw ? `<div class="footnote" style="margin-bottom:8px;">Raw source address (couldn't be auto-split — copy the right pieces into the fields below): <span style="color:var(--ink);">"${esc(a.raw)}"</span></div>` : ""}
+        ${(() => {
+          const locked = r.stampsValidated && !addressEditUnlocked;
+          const dis = locked ? "disabled" : "";
+          return `
+        <div class="data-grid">
+          <label class="f">Street<input type="text" data-addr="street" value="${esc(a.street)}" ${dis}></label>
+          <label class="f">City<input type="text" data-addr="city" value="${esc(a.city)}" ${dis}></label>
+          <label class="f">State<input type="text" data-addr="state" value="${esc(a.state)}" ${dis}></label>
+          <label class="f">ZIP<input type="text" data-addr="zip" value="${esc(a.zip)}" ${dis}></label>
+          <label class="f">Country<input type="text" data-addr="country" value="${esc(a.country)}" ${dis}></label>
+          <label class="f">Email<input type="text" data-addr="email" value="${esc(r.email)}"></label>
+        </div>
+        ${locked ? `<div class="stamps-lock" style="margin-top:8px;">🔒 STAMPS-validated — locked from accidental edits</div>` : ""}
+        ${addressWarningOpen ? `
+        <div class="warning-banner" style="margin-top:10px;">
+          <span>⚠ This address was confirmed as STAMPS Validated. Editing it will require re-validating before it's trusted for shipment again.</span>
+          <div class="warning-actions">
+            <button class="btn ghost small" id="addressWarnCancelBtn" type="button">Cancel</button>
+            <button class="btn primary small" id="addressWarnConfirmBtn" type="button">Edit anyway</button>
+          </div>
+        </div>` : ""}
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          ${locked
+            ? `<button class="btn small ghost" id="addressEditAnywayBtn">Edit anyway</button>`
+            : `<button class="btn small primary" id="saveAddressBtn">Save address</button>`}
+          <button class="btn small ghost" id="markStampsValidatedBtn">${r.stampsValidated?"Unmark":"Mark"} STAMPS validated</button>
+        </div>
+        ${emailGroupSize(r.email)>1 ? `
+        <div class="footnote" style="margin-top:10px;">Shares an email with ${emailGroupSize(r.email)-1} other runner(s)${effectivePrimaryBib(r.email)===r.bib?" — this is the group's primary contact":r.isGroupPrimary===false?"":autoDetectedPrimaryBib(r.email)?"":" — no primary set, pick one when ready"}.</div>
+        <div style="margin-top:6px;">
+          ${effectivePrimaryBib(r.email)===r.bib
+            ? `<button class="btn small ghost" id="unsetPrimaryBtn">Unmark as primary</button>`
+            : `<button class="btn small ghost" id="setPrimaryBtn">Mark as primary contact</button>`}
+        </div>` : ""}
+        `;
+        })()}
+      </div>
+
+      <div>
+        <div class="field-label" style="margin-bottom:6px;">Shipments <span class="footnote">— same orientation as the printed warehouse report: BIB first, then one column per item, one row per actual shipment from Stamps. Tracking #, date, and delivered status come from Stamps and aren't editable here — click a cell to say which item(s) that shipment covers.</span></div>
+        ${(()=>{
+          const byTrack = new Map();
+          for(const it of r.items){ if(!it.trackingNumber) continue; if(!byTrack.has(it.trackingNumber)) byTrack.set(it.trackingNumber, { shippedDate:it.shippedDate, delivered:it.delivered }); }
+          const rows = [...byTrack.entries()].map(([track,g])=>({ track, date:g.shippedDate, delivered:g.delivered }));
+          for(const e of (detailUnassignedEntries||[])){
+            if(byTrack.has(e.trackingNumber)) continue;
+            rows.push({ track:e.trackingNumber, date:e.shipDate, delivered:!!e.delivered });
+          }
+          if(!rows.length) return `<div class="footnote" style="margin-bottom:10px;">No shipments recorded yet for this runner.</div>`;
+          return `<div style="overflow-x:auto;margin-bottom:10px;"><table class="rt">
+            <thead><tr><th>BIB</th><th>Tracking ID</th><th>Date</th><th>Delivered</th>${r.items.map(it=>`<th>${esc(it.name)}${it.size?` (${esc(it.size)})`:""}</th>`).join("")}<th></th></tr></thead>
+            <tbody>${rows.map(row=>`<tr>
+              <td class="mono">${esc(r.bib)}</td>
+              <td class="mono">${esc(row.track)}</td>
+              <td class="footnote">${esc(row.date)||"—"}</td>
+              <td>${row.delivered?"✓":""}</td>
+              ${r.items.map(it=>{
+                const key = it.key||it.name;
+                const on = it.trackingNumber===row.track;
+                return `<td data-ship-cell data-ship-track="${esc(row.track)}" data-ship-date="${esc(row.date)}" data-ship-delivered="${row.delivered?1:0}" data-ship-item="${esc(key)}" style="text-align:center;cursor:pointer;" title="Click to ${on?"take out of":"put in"} this shipment">${on?"✓":"—"}</td>`;
+              }).join("")}
+              <td>${trackButton(row.track)}</td>
+            </tr>`).join("")}</tbody>
+          </table></div>`;
+        })()}
+        <div class="field-label" style="margin-bottom:6px;">Record a shipment by hand <span class="footnote">— only when you already know a tracking number Stamps hasn't given you yet</span></div>
+        <div class="apply-all-box">
+          <b style="font-size:0.78rem;">📦 Applies to every item — adjust which ones in the table above after</b>
+          <input type="text" id="allItemsTrack" placeholder="Tracking #" style="width:26ch;">
+          <input type="text" id="allItemsDate" placeholder="Shipping date" style="max-width:130px;">
+          <button class="btn small primary" id="applyTrackAllBtn">Apply ↓</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <input type="text" id="newItemName" placeholder="Add item (e.g. replacement medal)" style="max-width:260px;">
+          <input type="text" id="newItemTrack" placeholder="Tracking # (optional)" style="max-width:200px;">
+          <input type="text" id="newItemDate" placeholder="Shipping date (optional)" style="max-width:140px;">
+          <button class="btn small ghost" id="addItemBtn">Add item</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ================= modal dispatch ================= */
+function renderModal(){
+  if(modalState.type==="validate") return renderValidateModal();
+  if(modalState.type==="assignHistoryDate") return renderAssignHistoryDateModal();
+  if(modalState.type==="bulkManualShip") return renderBulkManualShipModal();
+  if(modalState.type==="shipmentWorkflow") return renderShipmentWorkflowModal();
+  if(modalState.type==="notify") return renderNotifyModal();
+  if(modalState.type==="linkCalendar") return renderLinkCalendarModal();
+  return "";
+}
+
+function renderLinkCalendarModal(){
+  const sorted = [...calendarEvents].sort((a,b)=> new Date(a.date)-new Date(b.date));
+  return `<div class="modal-overlay" id="modalOverlay"><div class="modal">
+    <div class="modal-head"><div><h3>Link to calendar</h3><p>Optional — only used to show the event date and default which tab opens.</p></div><button class="modal-close" id="modalCloseX">×</button></div>
+    <div class="modal-body">
+      <select id="calendarSelect">
+        <option value="">— none —</option>
+        ${sorted.map(e=>`<option value="${e.num}" ${currentEvent.meta && currentEvent.meta.calendarNum===e.num?"selected":""}>#${e.num} · ${e.date} · ${esc(e.active||e.rsu)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="modal-foot"><span></span><button class="btn primary small" id="linkCalendarSaveBtn">Save</button></div>
+  </div></div>`;
+}
+function closeModal(){ modalState = null; render(); }
+
+/* ---- Validate Addresses queue ---- */
+function pendingAddressRecords(){
+  return modeRecords().filter(r=>r.addressStatus!=="READY" || !r.stampsValidated);
+}
+function renderValidateModal(){
+  const pending = pendingAddressRecords();
+  const idx = Math.min(modalState.idx||0, Math.max(0,pending.length-1));
+  const r = pending[idx];
+  return `<div class="modal-overlay" id="modalOverlay"><div class="modal">
+    <div class="modal-head"><div><h3>Validate Addresses</h3><p>${pending.length} pending in ${mode} · ${idx+1} of ${pending.length||0}</p></div><button class="modal-close" id="modalCloseX">×</button></div>
+    <div class="modal-body">
+      ${!r ? `<div class="warning-banner" style="background:var(--good-bg);color:var(--good);">All addresses validated for ${mode}. 🎉</div>` : `
+      <div><b>${esc(r.firstName)} ${esc(r.lastName)}</b> — BIB ${esc(r.bib)} <span class="status-pill ${pillClass(r.addressStatus)}">${r.addressStatus}</span></div>
+      ${r.addressReviewReason ? `<div class="footnote">${esc(r.addressReviewReason)}</div>`:""}
+      ${r.address.raw ? `<div class="footnote">Raw source address: "${esc(r.address.raw)}"</div>` : ""}
+      <div class="data-grid">
+        <label class="f">Street<input type="text" data-vaddr="street" value="${esc(r.address.street)}"></label>
+        <label class="f">City<input type="text" data-vaddr="city" value="${esc(r.address.city)}"></label>
+        <label class="f">State<input type="text" data-vaddr="state" value="${esc(r.address.state)}"></label>
+        <label class="f">ZIP<input type="text" data-vaddr="zip" value="${esc(r.address.zip)}"></label>
+        <label class="f">Country<input type="text" data-vaddr="country" value="${esc(r.address.country)}"></label>
+      </div>`}
+    </div>
+    <div class="modal-foot">
+      <span></span>
+      <div style="display:flex;gap:8px;">
+        ${r ? `<button class="btn ghost small" id="vSkipBtn">Skip</button>
+        <button class="btn ghost small" id="vFlagReviewBtn">Flag: Review Required</button>
+        <button class="btn primary small" id="vSaveReadyBtn">Save &amp; Mark STAMPS Validated</button>` : `<button class="btn primary small" id="modalCloseBtn">Done</button>`}
+      </div>
+    </div>
+  </div></div>`;
+}
+
+/* ================= Stamps History (library-level, all events) ================= */
+
+async function openStampsHistoryScreen(){
+  screen = "stampsHistory";
+  stampsHistory = await window.shipAPI.loadStampsHistory();
+  stampsHistoryDateGroups = await window.shipAPI.stampsHistoryDateGroups();
+  folders = await window.shipAPI.listEventFolders(); // for the assign-date event picker
+  render();
+}
+
+let selectedHistoryDates = new Set(); // ship dates checked in the Stamps History table, for bulk assign
+
+async function openAssignModalForDates(dates){
+  const entries = stampsHistory.filter(h => dates.includes(h.shipDate) && !h.assignment);
+  modalState = { type:"assignHistoryDate", dates, step:1, folderName:"", targetMode:"post-event", itemKeys:[], eventRecords:[], result:null, entries, suggestions:[], openEventCount:0 };
+  render();
+  // Fetch after the first paint so the label preview shows immediately —
+  // exactly what was asked for: recognize the batch before being asked to
+  // pick anything, not guess blind from a dropdown.
+  const { suggestions, openEventCount } = await window.shipAPI.suggestEventForDates(dates);
+  if(modalState !== null && modalState.dates === dates){
+    modalState.suggestions = suggestions;
+    modalState.openEventCount = openEventCount;
+    const top = suggestions[0];
+    // Auto-fill the event+mode only when the evidence is genuinely
+    // one-sided (one open event, or one dominant match) — the operator
+    // still has to say what item(s) this batch was, and can always
+    // override the event/mode pick below.
+    if(top && top.confident){
+      modalState.folderName = top.folderName;
+      modalState.targetMode = top.mode;
+      const f = folders.find(x=>x.name===top.folderName);
+      modalState.eventRecords = f ? (await window.shipAPI.loadRecords(f.folderPath)).filter(r=>r.mode===top.mode) : [];
+    }
+    render();
+  }
+}
+
+function renderStampsHistoryScreen(){
+  const groups = stampsHistoryDateGroups;
+  const unassignedGroups = groups.filter(g=>g.unassigned>0);
+  const selectedCount = [...selectedHistoryDates].filter(d=>unassignedGroups.some(g=>g.date===d)).length;
+  const selectedLabelCount = unassignedGroups.filter(g=>selectedHistoryDates.has(g.date)).reduce((n,g)=>n+g.unassigned,0);
+  const allSelected = unassignedGroups.length>0 && unassignedGroups.every(g=>selectedHistoryDates.has(g.date));
+  return `<div class="home">
+    <div>
+      <button class="btn ghost small" id="stampsHistoryBackBtn">${currentEvent ? `← Back to ${esc(currentEvent.name)}` : "← All events"}</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="font-size:1.6rem;">Stamps History</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost small" id="rerunAutoMatchBtn">🔁 Re-run auto-match</button>
+        <button class="btn primary small" id="importHistoryBtn">📄 Import Stamps history export</button>
+      </div>
+    </div>
+    <div class="footnote">Shared across every event — a print run can cover more than one event on the same day. Importing only ADDS new labels (matched by tracking number); nothing already recorded here is ever removed, so re-importing an overlapping export is safe. Every import auto-matches against every OPEN event's roster right away — tracking numbers land automatically, no per-date confirmation needed for the normal case. Only what doesn't match anything open stays listed below for manual review.</div>
+    ${stampsHistoryLastImport ? `<div class="warning-banner" style="background:#eef3ff;border-color:#a9c2f0;"><div>Last import: <b>${stampsHistoryLastImport.added}</b> new, ${stampsHistoryLastImport.duplicate} already recorded, ${stampsHistoryLastImport.skippedNoTracking} skipped (no tracking number), ${stampsHistoryLastImport.skippedNeverShipped||0} skipped (label printed or refunded — never actually shipped). <b>${stampsHistoryLastImport.autoAppliedCount||0}</b> newly bib-linked just now; ${stampsHistoryLastImport.remaining??""} still need manual review. Validated just now: ${stampsHistoryLastImport.statusCheck?.applied??0} on a real item, ${stampsHistoryLastImport.statusCheck?.pending??0} matched but waiting on Apply, ${stampsHistoryLastImport.statusCheck?.broken??0} with no runner link.</div></div>` : ""}
+    ${unassignedGroups.length ? `<div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn ghost small" id="selectAllHistoryDatesBtn">${allSelected?"☑":"☐"} Select all unassigned dates (${unassignedGroups.length})</button>
+      ${selectedCount ? `<button class="btn primary small" id="bulkAssignBtn">Assign ${selectedCount} date(s) — ${selectedLabelCount} label(s)…</button>` : ""}
+    </div>` : ""}
+    <div style="overflow-x:auto;margin-top:12px;"><table class="rt">
+      <thead><tr><th></th><th>Ship Date</th><th>Labels</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${groups.map(g=>`<tr>
+          <td>${g.unassigned>0 ? `<input type="checkbox" data-select-date="${esc(g.date)}" ${selectedHistoryDates.has(g.date)?"checked":""}>` : ""}</td>
+          <td>${esc(g.date)}</td>
+          <td>${g.total}</td>
+          <td>${g.unassigned>0 ? `<span class="status-pill ADDRESS-REQUIRED">${g.unassigned} unassigned</span>` : `<span class="status-pill READY">all assigned</span>`}</td>
+          <td>${g.unassigned>0 ? `<button class="btn ghost small" data-assign-date="${esc(g.date)}">Assign…</button>` : ""}</td>
+        </tr>`).join("") || `<tr><td colspan="5" class="footnote" style="padding:16px;">No Stamps history imported yet.</td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+function bindStampsHistoryScreen(){
+  const backBtn = document.getElementById("stampsHistoryBackBtn");
+  if(backBtn) backBtn.onclick = () => { screen = currentEvent ? "dashboard" : "home"; render(); };
+  const importBtn = document.getElementById("importHistoryBtn");
+  if(importBtn) importBtn.onclick = async () => {
+    // Contacts is what powers the name+address fallback match — importing
+    // history before it's loaded silently caps matching at BIB-only, with
+    // no way to undo the auto-apply afterward. Ask first, every time.
+    const coverage = await window.shipAPI.checkContactsCoverage();
+    const missing = coverage.filter(c=>!c.hasContacts);
+    if(missing.length){
+      const list = missing.map(c=>`• ${c.folderName} (${c.mode})`).join("\n");
+      const proceed = confirm(`These open event(s) don't have a Stamps Contacts file loaded yet:\n\n${list}\n\nWithout it, matching will be BIB-only (no name+address fallback) — likely fewer matches than possible. Load Contacts first for better results.\n\nImport anyway?`);
+      if(!proceed) return;
+    }
+    const filePath = await window.shipAPI.pickAnyFile("Select a Stamps history/label export CSV");
+    if(!filePath) return;
+    stampsHistoryLastImport = await window.shipAPI.importStampsHistoryFile(filePath);
+    stampsHistory = await window.shipAPI.loadStampsHistory();
+    stampsHistoryDateGroups = await window.shipAPI.stampsHistoryDateGroups();
+    render();
+  };
+  const rerunBtn = document.getElementById("rerunAutoMatchBtn");
+  if(rerunBtn) rerunBtn.onclick = async () => {
+    const res = await window.shipAPI.autoMatchStampsHistoryNow();
+    stampsHistory = await window.shipAPI.loadStampsHistory();
+    stampsHistoryDateGroups = await window.shipAPI.stampsHistoryDateGroups();
+    if(currentEvent) await refreshEventData();
+    render();
+    const sc2 = res.statusCheck || {};
+    alert(`Auto-match: ${res.autoAppliedCount} newly linked (bib match only). ${res.remaining} still unmatched.\n\nJust validated: ${sc2.applied||0} on a real item, ${sc2.pending||0} matched but still waiting on Apply, ${sc2.broken||0} with no runner link at all.`);
+  };
+  document.querySelectorAll("[data-select-date]").forEach(cb => cb.onchange = () => {
+    const d = cb.dataset.selectDate;
+    if(cb.checked) selectedHistoryDates.add(d); else selectedHistoryDates.delete(d);
+    render();
+  });
+  const selectAllBtn = document.getElementById("selectAllHistoryDatesBtn");
+  if(selectAllBtn) selectAllBtn.onclick = () => {
+    const unassigned = stampsHistoryDateGroups.filter(g=>g.unassigned>0).map(g=>g.date);
+    const allSelected = unassigned.every(d=>selectedHistoryDates.has(d));
+    selectedHistoryDates = allSelected ? new Set() : new Set(unassigned);
+    render();
+  };
+  const bulkAssignBtn = document.getElementById("bulkAssignBtn");
+  if(bulkAssignBtn) bulkAssignBtn.onclick = () => openAssignModalForDates([...selectedHistoryDates]);
+  document.querySelectorAll("[data-assign-date]").forEach(b => b.onclick = () => openAssignModalForDates([b.dataset.assignDate]));
+}
+
+/* ---- Assign a Stamps history date to an event + item(s) ---- */
+function assignModalTargetFolder(s){
+  return folders.find(f=>f.name===s.folderName);
+}
+function renderAssignHistoryDateModal(){
+  const s = modalState;
+  const target = assignModalTargetFolder(s);
+  return `<div class="modal-overlay" id="modalOverlay"><div class="modal">
+    <div class="modal-head"><div><h3>Assign ${esc(s.dates.join(", "))}</h3><p>What did ${s.dates.length>1?"these dates'":"this date's"} labels ship, and for which event?</p></div><button class="modal-close" id="modalCloseX">×</button></div>
+    <div class="modal-body">
+      <div class="field-label">Labels on this date (${s.entries.length}) <span class="footnote">— look these over before picking anything</span></div>
+      <div style="max-height:140px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;">
+        <table class="rt"><tbody>
+          ${s.entries.map(e=>`<tr><td>${esc(e.labelName)}</td><td class="mono footnote">${esc(e.trackingNumber)}</td><td class="footnote">${e.bib?"BIB "+esc(e.bib):"no BIB readable"}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+      ${s.suggestions.length ? `
+      <div class="field-label">Suggested event <span class="footnote">— based on how many of these BIBs are on each open event's roster (${s.openEventCount} event(s) currently open)</span></div>
+      <div style="margin-bottom:10px;">
+        ${s.suggestions.map(sug=>`<div class="footnote" style="display:flex;justify-content:space-between;padding:3px 0;">
+          <span>${sug.confident?"⭐ ":""}${esc(sug.folderName)} — ${sug.mode}</span><span>${sug.matchCount}/${sug.entryBibCount} BIBs match</span>
+        </div>${sug.dateWarning?`<div class="warning-banner" style="padding:6px 10px;font-size:0.76rem;"><div>⚠ ${esc(sug.dateWarning)}</div></div>`:""}`).join("")}
+      </div>
+      ` : (s.suggestions.length===0 && folders.length ? `<div class="footnote" style="margin-bottom:10px;">No open event's roster matches these BIBs — pick manually below, or check whether the right event's runner list has been imported yet.</div>` : "")}
+      <div class="field-label">Event</div>
+      <select id="assignEventSelect">
+        <option value="">— choose an event —</option>
+        ${folders.map(f=>`<option value="${esc(f.name)}" ${s.folderName===f.name?"selected":""}>${esc(f.name)}</option>`).join("")}
+      </select>
+      <div class="field-label" style="margin-top:10px;">Mode</div>
+      <select id="assignModeSelect">
+        <option value="pre-event" ${s.targetMode==="pre-event"?"selected":""}>Pre-Event</option>
+        <option value="post-event" ${s.targetMode==="post-event"?"selected":""}>Post-Event</option>
+      </select>
+      ${target ? `
+      <div class="field-label" style="margin-top:10px;">Item(s) this date's labels represent <span class="footnote">— check every item that went out in this specific label/shipment</span></div>
+      <div>
+        ${itemKeyOptions(s.eventRecords).map(o=>`<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 10px 2px 0;">
+          <input type="checkbox" data-item-key-opt="${esc(o.key)}" ${s.itemKeys.includes(o.key)?"checked":""}> ${esc(o.name)}
+        </label>`).join("") || `<div class="footnote">No ${s.targetMode} records loaded for this event yet.</div>`}
+      </div>
+      ` : `<div class="footnote" style="margin-top:10px;">Pick an event to see its items.</div>`}
+      ${s.result ? `
+      <div class="summary-grid" style="margin-top:14px;">
+        <div class="summary-item"><div class="n">${s.result.matched.length}</div><div class="l">Matched</div></div>
+        <div class="summary-item"><div class="n">${s.result.unmatched.length}</div><div class="l">Unmatched</div></div>
+      </div>
+      ${s.result.unmatched.length ? `<div class="warning-banner">Unmatched rows will be logged as MATCH REVIEW REQUIRED, not silently dropped.</div>` : ""}
+      ` : ""}
+    </div>
+    <div class="modal-foot">
+      <span>${s.result ? `<button class="btn ghost small" id="exportMatchReportBtn">Export match report</button>` : ""}</span>
+      <span style="display:flex;gap:8px;">
+        ${target && s.itemKeys.length ? `<button class="btn ghost small" id="previewAssignBtn">Preview match</button>` : ""}
+        ${s.result ? `<button class="btn primary small" id="applyAssignBtn">Apply ${s.result.matched.length} match(es)</button>` : ""}
+      </span>
+    </div>
+  </div></div>`;
+}
+
+// Item choices come from whatever's actually on this event's records for the
+// chosen mode (so ad hoc items show up too), not a hardcoded list.
+function itemKeyOptions(eventRecords){
+  const seen = new Map();
+  for(const r of eventRecords) for(const it of r.items) if(!seen.has(it.key||it.name)) seen.set(it.key||it.name, it.name);
+  return Array.from(seen, ([key,name])=>({key,name}));
+}
+
+function bindAssignHistoryDateModal(){
+  const s = modalState;
+  const evSel = document.getElementById("assignEventSelect");
+  if(evSel) evSel.onchange = async () => {
+    s.folderName = evSel.value;
+    s.itemKeys = []; s.result = null;
+    const f = assignModalTargetFolder(s);
+    s.eventRecords = f ? (await window.shipAPI.loadRecords(f.folderPath)).filter(r=>r.mode===s.targetMode) : [];
+    render();
+  };
+  const modeSel = document.getElementById("assignModeSelect");
+  if(modeSel) modeSel.onchange = async () => {
+    s.targetMode = modeSel.value;
+    s.itemKeys = []; s.result = null;
+    const f = assignModalTargetFolder(s);
+    s.eventRecords = f ? (await window.shipAPI.loadRecords(f.folderPath)).filter(r=>r.mode===s.targetMode) : [];
+    render();
+  };
+  document.querySelectorAll("[data-item-key-opt]").forEach(cb => cb.onchange = () => {
+    const k = cb.dataset.itemKeyOpt;
+    if(cb.checked){ if(!s.itemKeys.includes(k)) s.itemKeys.push(k); } else { s.itemKeys = s.itemKeys.filter(x=>x!==k); }
+    s.result = null;
+    render();
+  });
+  const previewBtn = document.getElementById("previewAssignBtn");
+  if(previewBtn) previewBtn.onclick = async () => {
+    const f = assignModalTargetFolder(s);
+    s.result = await window.shipAPI.assignStampsHistoryDates(s.dates, f.folderPath, s.targetMode, s.itemKeys, false);
+    render();
+  };
+  const applyBtn = document.getElementById("applyAssignBtn");
+  if(applyBtn) applyBtn.onclick = async () => {
+    const f = assignModalTargetFolder(s);
+    const applied = await window.shipAPI.assignStampsHistoryDate(s.date, f.folderPath, s.targetMode, s.itemKeys, true);
+    s.result = applied;
+    stampsHistoryDateGroups = await window.shipAPI.stampsHistoryDateGroups();
+    if(currentEvent && currentEvent.folderPath===f.folderPath){ await refreshEventData(); }
+    alert(`Applied ${applied.appliedCount} label(s) to ${esc(f.name)}. ${applied.unmatched.length} unmatched row(s) logged as MATCH REVIEW REQUIRED.`);
+    render();
+  };
+  const exportBtn = document.getElementById("exportMatchReportBtn");
+  if(exportBtn) exportBtn.onclick = async () => {
+    const f = assignModalTargetFolder(s);
+    const opts = itemKeyOptions(s.eventRecords);
+    const itemNames = s.itemKeys.map(k => (opts.find(o=>o.key===k)||{}).name || k);
+    await window.shipAPI.exportTrackingMatchReportCsv(f.folderPath, s.result, itemNames);
+  };
+}
+
+/* ---- Bulk notify confirm ---- */
+function renderNotifyModal(){
+  const s = modalState;
+  return `<div class="modal-overlay" id="modalOverlay"><div class="modal">
+    <div class="modal-head"><div><h3>Notify selected runners</h3><p>${s.list.length} with a usable email will be emailed; ${s.skipped.length} skipped (no email)</p></div><button class="modal-close" id="modalCloseX">×</button></div>
+    <div class="modal-body">
+      <div style="overflow-x:auto;"><table class="rt"><thead><tr><th>Name</th><th>Email</th><th>Items</th></tr></thead><tbody>
+      ${s.list.map(r=>`<tr><td>${esc(r.firstName)} ${esc(r.lastName)}</td><td>${esc(r.email)}</td><td>${r.items.filter(i=>i.trackingNumber).map(i=>esc(i.name)).join(", ")}</td></tr>`).join("")}
+      </tbody></table></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost small" id="modalCloseBtn2">Cancel</button><button class="btn primary small" id="notifyConfirmBtn">Send ${s.list.length} email(s)</button></div>
+  </div></div>`;
+}
+
+/* ---- Bulk: apply one tracking number, typed by hand, to a selected group ---- */
+// For a bulk drop-off etc. where one real tracking number covers a whole
+// selected group's item(s) — a real number is required, no fallback to
+// marking things shipped without one.
+function renderBulkManualShipModal(){
+  const s = modalState;
+  const chosen = modeRecords().filter(r=>selected.has(r.bib));
+  const opts = itemKeyOptions(chosen);
+  return `<div class="modal-overlay" id="modalOverlay"><div class="modal">
+    <div class="modal-head"><div><h3>Apply a tracking number</h3><p>${chosen.length} runner(s) selected — pick the item(s) this tracking number covers</p></div><button class="modal-close" id="modalCloseX">×</button></div>
+    <div class="modal-body">
+      <div class="field-label">Item(s) this covers <span class="footnote">— only applied to a runner if that item doesn't already have a tracking number</span></div>
+      <div>
+        ${opts.map(o=>`<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 10px 2px 0;">
+          <input type="checkbox" data-bulk-ship-item="${esc(o.key)}" ${s.itemKeys.includes(o.key)?"checked":""}> ${esc(o.name)}
+        </label>`).join("")}
+      </div>
+      <div class="field-label" style="margin-top:10px;">Tracking number <span class="footnote">— required; shared across the whole selection</span></div>
+      <input type="text" id="bulkShipTrackInput" placeholder="Tracking #" value="${esc(s.trackingNumber||"")}">
+      <div class="field-label" style="margin-top:10px;">Note <span class="footnote">— optional context for the audit log</span></div>
+      <textarea id="bulkShipNoteInput" rows="2" style="width:100%;" placeholder="e.g. &quot;Bulk drop-off 8/31 — all Top 3&quot;">${esc(s.note||"")}</textarea>
+    </div>
+    <div class="modal-foot"><span></span><button class="btn primary small" id="bulkShipConfirmBtn" ${s.itemKeys.length?"":"disabled"}>Apply to ${chosen.length} runner(s)</button></div>
+  </div></div>`;
+}
+
+function bindBulkManualShipModal(){
+  const s = modalState;
+  document.querySelectorAll("[data-bulk-ship-item]").forEach(cb => cb.onchange = () => {
+    const k = cb.dataset.bulkShipItem;
+    if(cb.checked){ if(!s.itemKeys.includes(k)) s.itemKeys.push(k); } else { s.itemKeys = s.itemKeys.filter(x=>x!==k); }
+    render();
+  });
+  const trackInput = document.getElementById("bulkShipTrackInput");
+  if(trackInput) trackInput.oninput = () => { s.trackingNumber = trackInput.value; };
+  const noteInput = document.getElementById("bulkShipNoteInput");
+  if(noteInput) noteInput.oninput = () => { s.note = noteInput.value; };
+  const confirmBtn = document.getElementById("bulkShipConfirmBtn");
+  if(confirmBtn) confirmBtn.onclick = async () => {
+    const trackingNumber = (document.getElementById("bulkShipTrackInput").value||"").trim();
+    if(!trackingNumber){ alert("Enter a tracking number first."); return; }
+    if(!isValidTrackingNumber(trackingNumber)){ alert(`Doesn't look like a real tracking number: ${trackingNumber}\n\nExpected a USPS (20-22 digit), UPS ("1Z..."), or FedEx (12 or 15 digit) tracking number.`); return; }
+    const note = (document.getElementById("bulkShipNoteInput").value||"").trim();
+    const today = todayIso();
+    const chosen = modeRecords().filter(r=>selected.has(r.bib));
+    const affected = [];
+    for(const r of chosen){
+      for(const key of s.itemKeys){
+        const it = r.items.find(i=>(i.key||i.name)===key);
+        if(!it || it.trackingNumber) continue; // never overwrite a real tracking hit
+        it.trackingNumber = trackingNumber; it.shippedDate = today; it.delivered = false;
+        affected.push({ bib: r.bib, item: key });
+      }
+    }
+    await persistRecords();
+    await logAudit("bulk-tracking-applied", { itemKeys: s.itemKeys, trackingNumber, note, count: affected.length, affected });
+    closeModal();
+    selected = new Set();
+    render();
+    alert(`Applied to ${affected.length} item(s) across the selection.`);
+  };
+}
+
+/* ---- Update Shipment Status: 3 steps — choose an action, define group(s) if building a population, review ---- */
+const WORKFLOW_POPULATION_LABEL = { "all":"All Finishers", "top3-overall":"Top 3 Overall", "top3-agegroup":"Top 3 Age Group", "person":"Specific person" };
+function workflowPopulationRecords(population, searchName){
+  const mr = modeRecords();
+  if(population==="top3-overall") return mr.filter(r=>r.items.some(i=>(i.key||i.name)==="gender-award"));
+  if(population==="top3-agegroup") return mr.filter(r=>r.items.some(i=>(i.key||i.name)==="division-award"));
+  if(population==="person"){
+    const q = (searchName||"").trim().toLowerCase();
+    if(!q) return [];
+    return mr.filter(r=>r.bib===q || `${r.firstName} ${r.lastName}`.toLowerCase().includes(q));
+  }
+  return mr; // "all"
+}
+// Display-only summary of a group — always resolves item keys to their real
+// current name (never a hardcoded label, never a raw key like "finisher-medal").
+// Shows the FULL set of items a runner in this group actually ends up with,
+// not just this group's own checked boxes — a Top 3 Overall runner is also
+// an All Finishers runner, so their line shows Medal+T-Shirt+Award, not just
+// the Award, which is all this group alone would otherwise seem to say.
+function workflowGroupSummary(g, allGroups){
+  const recs = workflowPopulationRecords(g.population, g.searchName);
+  const opts = itemKeyOptions(recs.length?recs:modeRecords());
+  const recBibs = new Set(recs.map(r=>r.bib));
+  const unionKeys = new Set(g.itemKeys);
+  for(const other of (allGroups||[])){
+    if(other===g) continue;
+    const otherRecs = workflowPopulationRecords(other.population, other.searchName);
+    if(otherRecs.some(r=>recBibs.has(r.bib))) other.itemKeys.forEach(k=>unionKeys.add(k));
+  }
+  const itemNames = [...unionKeys].map(k=>(opts.find(o=>o.key===k)||{}).name || k);
+  const who = g.population==="person" ? `"${g.searchName}"` : WORKFLOW_POPULATION_LABEL[g.population];
+  return { recs, itemNames, who };
+}
+
+function renderShipmentWorkflowModal(){
+  const s = modalState;
+  const meta = currentEvent.meta||{};
+  return `<div class="modal-overlay" id="modalOverlay"><div class="modal">
+    <div class="modal-head"><div><h3>Update Shipment Status</h3><p>Step ${s.step} of 3</p></div><button class="modal-close" id="modalCloseX">×</button></div>
+    <div class="modal-body">
+      ${s.step===1 ? `
+        <div class="footnote" style="margin-bottom:14px;">Stamps Contacts file: ${stampsContacts.length ? `${stampsContacts.length} loaded${meta.contactsImportedAt?", imported "+meta.contactsImportedAt.slice(0,10):""}` : "none loaded yet — load it from the sidebar first for the best match rate"}.</div>
+        <button class="btn primary" id="wfGoMatchBtn" style="width:100%;text-align:left;padding:14px 16px;" ${s.matching?"disabled":""}>
+          <div style="font-weight:700;">📬 ${s.matching?"Matching… please wait":"Match Contacts with Tracking"}</div>
+          <div class="footnote" style="margin-top:4px;">Import a Stamps export. Matches each label to your Contacts list, then continues straight into defining what this batch is shipping.</div>
+        </button>
+      ` : ""}
+      ${s.step===2 ? `
+        ${s.groups.length ? `
+        <div class="field-label">Group(s) defined so far</div>
+        <div style="margin-bottom:12px;">
+          ${s.groups.map((g,idx)=>{ const sum = workflowGroupSummary(g); return `<div class="footnote" style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--line);">
+            <span>${esc(sum.who)} → ${esc(sum.itemNames.join(", ")||"(no items)")} <span class="footnote">(${sum.recs.length} record(s))</span></span>
+            <button class="btn ghost small" data-wf-remove-group="${idx}" style="padding:1px 8px;">Remove</button>
+          </div>`; }).join("")}
+        </div>` : ""}
+        <div class="field-label">Add a group — who does this apply to?</div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;">
+          <label><input type="radio" name="wfpop" data-wf-pop="all" ${s.draftPopulation==="all"?"checked":""}> All Finishers</label>
+          <label><input type="radio" name="wfpop" data-wf-pop="top3-overall" ${s.draftPopulation==="top3-overall"?"checked":""}> Top 3 Overall</label>
+          <label><input type="radio" name="wfpop" data-wf-pop="top3-agegroup" ${s.draftPopulation==="top3-agegroup"?"checked":""}> Top 3 Age Group</label>
+          <label><input type="radio" name="wfpop" data-wf-pop="person" ${s.draftPopulation==="person"?"checked":""}> Specific person</label>
+          ${s.draftPopulation==="person" ? `<input type="text" id="wfSearchName" placeholder="BIB or name" value="${esc(s.draftSearchName)}" style="margin-left:22px;max-width:220px;">` : ""}
+        </div>
+        <div class="footnote">${workflowPopulationRecords(s.draftPopulation, s.draftSearchName).length} record(s) match.</div>
+        <div class="field-label" style="margin-top:10px;">What item(s) go out for this group? <span class="footnote">— never assumed, since it depends on what's available</span></div>
+        <div>${itemKeyOptions(modeRecords()).map(o=>`<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 10px 2px 0;">
+          <input type="checkbox" data-wf-item="${esc(o.key)}" ${s.draftItemKeys.includes(o.key)?"checked":""}> ${esc(o.name)}
+        </label>`).join("")}</div>
+        <button class="btn ghost small" id="wfAddGroupBtn" style="margin-top:10px;" ${s.draftItemKeys.length?"":"disabled"}>+ Add this group</button>
+      ` : ""}
+      ${s.step===3 ? `
+        ${s.bypassAll ? `
+        <div>Skipping group definition — applying to every matched runner's own item list, exactly as it already stands from import. Nothing new is being decided; this only updates status against what's already listed. It never overwrites an item that already has a tracking number, and a runner with 2+ shipments still gets the rest left for you to sort by hand on their own card.</div>
+        ` : `
+        <div>Applying this checks these items onto whichever real shipment(s) are already matched to each runner in these groups — the earliest one if a runner has more than one. It never overwrites an item that already has a tracking number, and a runner with 2+ shipments still gets the rest left for you to sort by hand on their own card.</div>
+        <div style="margin-top:8px;">
+          ${s.groups.map(g=>{ const sum = workflowGroupSummary(g); return `<div class="footnote" style="padding:3px 0;">${esc(sum.who)} → ${esc(sum.itemNames.join(", "))} <span class="footnote">(${sum.recs.length} record(s))</span></div>`; }).join("")}
+        </div>
+        `}
+        ${s.applyResult ? `<div class="footnote" style="margin-top:10px;color:var(--good);">Applied to ${s.applyResult.appliedCount} runner(s).</div>` : ""}
+      ` : ""}
+    </div>
+    <div class="modal-foot">
+      <span>${s.step>1 && !s.applyResult ?`<button class="btn ghost small" id="wfBackBtn">← Back</button>`:""}</span>
+      <span style="display:flex;gap:8px;">
+        ${s.step===2 ? `<button class="btn ghost small" id="wfSkipBtn">Skip — just update statuses</button><button class="btn primary small" id="wfStep2NextBtn" ${s.groups.length?"":"disabled"}>Next → (${s.groups.length} group(s))</button>` : ""}
+        ${s.step===3 && s.applyResult ? `<button class="btn primary small" id="wfDoneBtn">Done</button>` : ""}
+        ${s.step===3 && !s.applyResult ? `<button class="btn primary small" id="wfApplyGroupsBtn" ${s.applying?"disabled":""}>${s.applying?"Applying…":"Apply items to matched shipments"}</button>` : ""}
+      </span>
+    </div>
+  </div></div>`;
+}
+
+function bindShipmentWorkflowModal(){
+  const s = modalState;
+  if(s.step===1){
+    const goMatch = document.getElementById("wfGoMatchBtn");
+    if(goMatch) goMatch.onclick = async () => {
+      const coverage = await window.shipAPI.checkContactsCoverage();
+      const missing = coverage.filter(c=>!c.hasContacts);
+      if(missing.length){
+        const list = missing.map(c=>`• ${c.folderName} (${c.mode})`).join("\n");
+        const proceed = confirm(`These open event(s) don't have a Stamps Contacts file loaded yet:\n\n${list}\n\nWithout it, matching will be BIB-only — likely fewer matches than possible.\n\nImport anyway?`);
+        if(!proceed) return;
+      }
+      const filePath = await window.shipAPI.pickAnyFile("Select a Stamps history/label export CSV");
+      if(!filePath) return;
+      s.matching = true; render();
+      const res = await window.shipAPI.importStampsHistoryFile(filePath);
+      await refreshEventData();
+      s.matching = false;
+      const sc = res.statusCheck || {};
+      alert(`${res.added} new label(s) added, ${res.duplicate} already recorded. ${res.autoAppliedCount} runner(s) newly linked to a tracking number just now (bib match only — no item/status change yet); ${res.remaining} still need review across all events.\n\nJust validated, across every event: ${sc.applied||0} tracking number(s) are actually on a real item, ${sc.pending||0} are matched to a runner but still waiting on the Apply step, ${sc.broken||0} have no runner link at all and need attention.\n\nNext, say what this batch is shipping.`);
+      s.step = 2;
+      render();
+    };
+  }
+  if(s.step===2){
+    document.querySelectorAll("[data-wf-pop]").forEach(r => r.onchange = () => { s.draftPopulation = r.dataset.wfPop; s.draftItemKeys=[]; render(); });
+    const searchInput = document.getElementById("wfSearchName");
+    if(searchInput) searchInput.oninput = () => { s.draftSearchName = searchInput.value; render(); };
+    document.querySelectorAll("[data-wf-item]").forEach(cb => cb.onchange = () => {
+      const k = cb.dataset.wfItem;
+      if(cb.checked){ if(!s.draftItemKeys.includes(k)) s.draftItemKeys.push(k); } else { s.draftItemKeys = s.draftItemKeys.filter(x=>x!==k); }
+      render();
+    });
+    document.querySelectorAll("[data-wf-remove-group]").forEach(b => b.onclick = () => {
+      s.groups.splice(Number(b.dataset.wfRemoveGroup), 1);
+      render();
+    });
+    const addGroupBtn = document.getElementById("wfAddGroupBtn");
+    if(addGroupBtn) addGroupBtn.onclick = () => {
+      s.groups.push({ population: s.draftPopulation, itemKeys: [...s.draftItemKeys], searchName: s.draftSearchName });
+      s.draftItemKeys = []; s.draftPopulation = "all"; s.draftSearchName = "";
+      render();
+    };
+    const nextBtn = document.getElementById("wfStep2NextBtn");
+    if(nextBtn) nextBtn.onclick = () => { s.step = 3; render(); };
+    const skipBtn = document.getElementById("wfSkipBtn");
+    if(skipBtn) skipBtn.onclick = () => { s.bypassAll = true; s.step = 3; render(); };
+  }
+  if(s.step===3){
+    const backBtn = document.getElementById("wfBackBtn");
+    if(backBtn) backBtn.onclick = () => { s.bypassAll = false; s.step = s.step-1; render(); };
+    const doneBtn = document.getElementById("wfDoneBtn");
+    if(doneBtn) doneBtn.onclick = () => closeModal();
+    const applyBtn = document.getElementById("wfApplyGroupsBtn");
+    if(applyBtn) applyBtn.onclick = async () => {
+      const bibItemKeys = {};
+      if(s.bypassAll){
+        // No group defined — apply to every matched runner's own item
+        // list exactly as it already stands from import. Skips group
+        // definition entirely; still never overwrites an item that
+        // already has a tracking number (enforced server-side).
+        for(const r of modeRecords()){
+          bibItemKeys[r.bib] = new Set(r.items.map(i => i.key || i.name));
+        }
+      } else {
+        // Union each group's items per bib — overlapping groups (a Top 3
+        // Overall runner is also an "All Finishers" runner) combine into one
+        // set per person instead of being applied twice.
+        for(const g of s.groups){
+          const recs = workflowPopulationRecords(g.population, g.searchName);
+          for(const r of recs){
+            if(!bibItemKeys[r.bib]) bibItemKeys[r.bib] = new Set();
+            for(const key of g.itemKeys) bibItemKeys[r.bib].add(key);
+          }
+        }
+      }
+      const payload = {};
+      for(const bib in bibItemKeys) payload[bib] = [...bibItemKeys[bib]];
+      s.applying = true; render();
+      const res = await window.shipAPI.applyGroupItems(currentEvent.folderPath, mode, payload);
+      await refreshEventData();
+      s.applying = false; s.applyResult = res;
+      render();
+    };
+    return;
+  }
+  const backBtn = document.getElementById("wfBackBtn");
+  if(backBtn && s.step!==3) backBtn.onclick = () => { s.step = s.step-1; render(); };
+}
+
+/* ================= event binding ================= */
+function bindShellEvents(){
+  document.getElementById("homeBtn").onclick = () => { screen = currentEvent ? "dashboard" : "home"; render(); };
+  document.getElementById("changeLibBtn").onclick = pickLibrary;
+  document.getElementById("toggleSidebarBtn").onclick = () => { sidebarCollapsed = !sidebarCollapsed; render(); };
+  const pickLibBtn = document.getElementById("pickLibBtn"); if(pickLibBtn) pickLibBtn.onclick = pickLibrary;
+
+  const newFolderBtn = document.getElementById("newFolderBtn");
+  if(newFolderBtn) newFolderBtn.onclick = createFolderPrompt;
+  const populateBtn = document.getElementById("populateBtn");
+  if(populateBtn) populateBtn.onclick = async () => {
+    const res = await window.shipAPI.populateFromCalendar();
+    folders = await window.shipAPI.listEventFolders();
+    render();
+    alert(`Created ${res.created} new event folder(s). Existing folders were left untouched.`);
+  };
+
+  document.querySelectorAll("[data-open]").forEach(b => b.onclick = () => {
+    const f = folders.find(x=>x.name===b.dataset.open);
+    openFolderEntry(f);
+  });
+
+  const backHomeBtn = document.getElementById("backHomeBtn");
+  if(backHomeBtn) backHomeBtn.onclick = () => { screen = "home"; currentEvent=null; render(); };
+
+  const openFolderBtn = document.getElementById("openFolderBtn");
+  if(openFolderBtn) openFolderBtn.onclick = () => window.shipAPI.openFolder(currentEvent.folderPath);
+
+  const linkCalendarBtn = document.getElementById("linkCalendarBtn");
+  if(linkCalendarBtn) linkCalendarBtn.onclick = () => { modalState = { type:"linkCalendar" }; render(); };
+  const toggleShippingClosedBtn = document.getElementById("toggleShippingClosedBtn");
+  if(toggleShippingClosedBtn) toggleShippingClosedBtn.onclick = async () => {
+    currentEvent.meta = { ...currentEvent.meta, shippingClosed: !currentEvent.meta.shippingClosed };
+    await window.shipAPI.saveFolderMeta(currentEvent.folderPath, currentEvent.meta);
+    await logAudit("shipping-status-changed", { shippingClosed: currentEvent.meta.shippingClosed });
+    render();
+  };
+
+  document.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => { mode = b.dataset.mode; selected=new Set(); selectedId=null; filterRaces=new Set(); filterStatuses=new Set(); render(); });
+  // Deliberately NOT live-as-you-type — the operator asked to type the full
+  // BIB/name and trigger the search explicitly (Enter or the button), not
+  // have the table refilter on every keystroke.
+  const searchInput = document.getElementById("searchInput");
+  if(searchInput){
+    searchInput.oninput = () => { searchDraft = searchInput.value; };
+    searchInput.onkeydown = (e) => { if(e.key==="Enter"){ searchQuery = searchInput.value.trim(); render(); } };
+  }
+  const searchGoBtn = document.getElementById("searchGoBtn");
+  if(searchGoBtn) searchGoBtn.onclick = () => { searchQuery = (document.getElementById("searchInput").value||"").trim(); render(); };
+  const searchClearBtn = document.getElementById("searchClearBtn");
+  if(searchClearBtn) searchClearBtn.onclick = () => { searchQuery = ""; searchDraft = ""; render(); };
+
+  document.querySelectorAll("[data-filter]").forEach(b => b.onclick = () => {
+    const k = b.dataset.filter;
+    if(k==="all"){ filterStatuses = new Set(); } else { if(filterStatuses.has(k)) filterStatuses.delete(k); else filterStatuses.add(k); }
+    render();
+  });
+  document.querySelectorAll("[data-race]").forEach(b => b.onclick = () => {
+    const r = b.dataset.race;
+    if(filterRaces.has(r)) filterRaces.delete(r); else filterRaces.add(r);
+    render();
+  });
+  const raceClear = document.querySelector("[data-race-clear]");
+  if(raceClear) raceClear.onclick = () => { filterRaces = new Set(); render(); };
+
+  const refreshSourceFilesBtn = document.getElementById("refreshSourceFilesBtn");
+  if(refreshSourceFilesBtn) refreshSourceFilesBtn.onclick = async () => {
+    sourceFiles = await window.shipAPI.listSourceFiles(currentEvent.folderPath);
+    render();
+    alert(sourceFiles.length ? `Found ${sourceFiles.length} CSV file(s) in source-files/.` : "No CSV files found in source-files/.");
+  };
+  const refreshAllBtn = document.getElementById("refreshAllBtn");
+  if(refreshAllBtn) refreshAllBtn.onclick = async () => {
+    await refreshEventData();
+    if(selectedId) detailUnassignedEntries = await window.shipAPI.unassignedEntriesForBib(currentEvent.folderPath, mode, selectedId);
+    render();
+  };
+  document.querySelectorAll("[data-import-file]").forEach(b => b.onclick = () => doImport({ fileName: b.dataset.importFile }));
+  const browseElsewhereBtn = document.getElementById("browseElsewhereBtn");
+  if(browseElsewhereBtn) browseElsewhereBtn.onclick = () => doImport({});
+  // These open themselves (main process launches the file in Excel once
+  // written) — no confirmation dialog needed, the file opening IS the confirmation.
+  const exportLogBtn = document.getElementById("exportLogBtn");
+  if(exportLogBtn) exportLogBtn.onclick = () => window.shipAPI.exportLogCsv(currentEvent.folderPath);
+  const exportAuditBtn = document.getElementById("exportAuditBtn");
+  if(exportAuditBtn) exportAuditBtn.onclick = () => window.shipAPI.exportAuditCsv(currentEvent.folderPath);
+  const exportShipmentReportBtn = document.getElementById("exportShipmentReportBtn");
+  if(exportShipmentReportBtn) exportShipmentReportBtn.onclick = () => window.shipAPI.exportShipmentReportCsv(currentEvent.folderPath, mode);
+
+  const openValidate = document.getElementById("openValidate");
+  if(openValidate) openValidate.onclick = () => { modalState = { type:"validate", idx:0 }; render(); };
+  const openTrack = document.getElementById("openTrack");
+  if(openTrack) openTrack.onclick = () => { modalState = { type:"shipmentWorkflow", step:1, groups:[], draftPopulation:"all", draftItemKeys:[], draftSearchName:"", bypassAll:false }; render(); };
+  const loadContactsBtn = document.getElementById("loadContactsBtn");
+  if(loadContactsBtn) loadContactsBtn.onclick = () => loadContactsFile();
+
+  document.querySelectorAll("[data-select]").forEach(cb => cb.onchange = () => {
+    const bib = cb.dataset.select;
+    if(cb.checked) selected.add(bib); else selected.delete(bib);
+    render();
+  });
+  const selectAllCb = document.getElementById("selectAllCb");
+  if(selectAllCb) selectAllCb.onchange = () => {
+    const visible = visibleRecords();
+    if(selectAllCb.checked) visible.forEach(r=>selected.add(r.bib));
+    else visible.forEach(r=>selected.delete(r.bib));
+    render();
+  };
+  document.querySelectorAll("[data-row]").forEach(row => row.onclick = async (e) => {
+    if(e.target.tagName==="INPUT") return;
+    const bib = row.dataset.row;
+    selectedId = selectedId===bib ? null : bib;
+    addressEditUnlocked = false; addressWarningOpen = false;
+    detailUnassignedEntries = null;
+    render();
+    if(selectedId){
+      detailUnassignedEntries = await window.shipAPI.unassignedEntriesForBib(currentEvent.folderPath, mode, selectedId);
+      if(selectedId===bib) render();
+    }
+  });
+  const closeDetailBtn = document.getElementById("closeDetailBtn");
+  if(closeDetailBtn) closeDetailBtn.onclick = () => { selectedId=null; addressEditUnlocked=false; addressWarningOpen=false; render(); };
+
+  const bulkNotifyBtn = document.getElementById("bulkNotifyBtn");
+  if(bulkNotifyBtn) bulkNotifyBtn.onclick = () => {
+    const chosen = modeRecords().filter(r=>selected.has(r.bib));
+    const list = chosen.filter(r=>r.email);
+    const skipped = chosen.filter(r=>!r.email);
+    modalState = { type:"notify", list, skipped };
+    render();
+  };
+  const bulkClearBtn = document.getElementById("bulkClearBtn");
+  if(bulkClearBtn) bulkClearBtn.onclick = () => { selected = new Set(); render(); };
+
+  const bulkMarkValidatedBtn = document.getElementById("bulkMarkValidatedBtn");
+  if(bulkMarkValidatedBtn) bulkMarkValidatedBtn.onclick = async () => {
+    const chosen = modeRecords().filter(r=>selected.has(r.bib));
+    let skipped = 0;
+    const marked = [];
+    chosen.forEach(r=>{ if(r.addressStatus==="READY"){ r.stampsValidated = true; marked.push(r.bib); } else skipped++; });
+    await persistRecords();
+    await logAudit("bulk-stamps-validated", { bibs: marked, count: marked.length });
+    render();
+    if(skipped) alert(`${skipped} of ${chosen.length} selected weren't marked — their address isn't READY yet.`);
+  };
+  const bulkManualShipBtn = document.getElementById("bulkManualShipBtn");
+  if(bulkManualShipBtn) bulkManualShipBtn.onclick = () => {
+    modalState = { type:"bulkManualShip", itemKeys:[], trackingNumber:"", note:"" };
+    render();
+  };
+  const bulkValidateReadyBtn = document.getElementById("bulkValidateReadyBtn");
+  if(bulkValidateReadyBtn) bulkValidateReadyBtn.onclick = async () => {
+    const targets = modeRecords().filter(r=>r.addressStatus==="READY" && !r.stampsValidated);
+    targets.forEach(r=>{ r.stampsValidated = true; });
+    await persistRecords();
+    await logAudit("bulk-stamps-validated", { bibs: targets.map(r=>r.bib), count: targets.length });
+    render();
+    alert(`Marked ${targets.length} record(s) as STAMPS Validated.`);
+  };
+
+  // Shared by Save and Mark Validated — reads whatever's currently in the
+  // (editable, unlocked) address inputs into the record. Mark Validated
+  // must do this too: it used to skip straight to flipping the flag,
+  // silently discarding anything just typed but not yet saved, then
+  // re-rendering from the stale address and locking the fields — looking
+  // exactly like the edit had been wiped.
+  function readAddressFieldsIntoRecord(r){
+    const before = { ...r.address, email: r.email };
+    document.querySelectorAll("[data-addr]").forEach(inp => {
+      const k = inp.dataset.addr;
+      if(k==="email") r.email = inp.value.trim(); else r.address[k] = inp.value.trim();
+    });
+    const a = r.address;
+    r.addressStatus = (a.street&&a.city&&a.state&&a.zip) ? "READY" : (a.street||a.city||a.state||a.zip) ? "ADDRESS REVIEW REQUIRED" : "MISSING ADDRESS";
+    return before;
+  }
+  const saveAddressBtn = document.getElementById("saveAddressBtn");
+  if(saveAddressBtn) saveAddressBtn.onclick = async () => {
+    const r = records.find(x=>x.bib===selectedId && x.mode===mode);
+    const before = readAddressFieldsIntoRecord(r);
+    // Editing under the "Edit anyway" override invalidates the prior
+    // confirmation — the address just changed, so it needs re-validating.
+    if(addressEditUnlocked) r.stampsValidated = false;
+    addressEditUnlocked = false;
+    await persistRecords();
+    await logAudit("address-edit", { bib: r.bib, before, after: { ...r.address, email: r.email }, newStatus: r.addressStatus });
+    render();
+  };
+  const markStampsValidatedBtn = document.getElementById("markStampsValidatedBtn");
+  if(markStampsValidatedBtn) markStampsValidatedBtn.onclick = async () => {
+    const r = records.find(x=>x.bib===selectedId && x.mode===mode);
+    const locked = r.stampsValidated && !addressEditUnlocked;
+    let before = null;
+    if(!locked) before = readAddressFieldsIntoRecord(r); // fields are only editable/visible when unlocked
+    r.stampsValidated = !r.stampsValidated;
+    addressEditUnlocked = false; addressWarningOpen = false;
+    await persistRecords();
+    if(before) await logAudit("address-edit", { bib: r.bib, before, after: { ...r.address, email: r.email }, newStatus: r.addressStatus });
+    await logAudit("stamps-validated", { bib: r.bib, value: r.stampsValidated });
+    render();
+  };
+  const setPrimaryBtn = document.getElementById("setPrimaryBtn");
+  if(setPrimaryBtn) setPrimaryBtn.onclick = () => setGroupPrimary(selectedId);
+  const unsetPrimaryBtn = document.getElementById("unsetPrimaryBtn");
+  if(unsetPrimaryBtn) unsetPrimaryBtn.onclick = () => unsetGroupPrimary(selectedId);
+  const addressEditAnywayBtn = document.getElementById("addressEditAnywayBtn");
+  if(addressEditAnywayBtn) addressEditAnywayBtn.onclick = () => { addressWarningOpen = true; render(); };
+  const addressWarnCancelBtn = document.getElementById("addressWarnCancelBtn");
+  if(addressWarnCancelBtn) addressWarnCancelBtn.onclick = () => { addressWarningOpen = false; render(); };
+  const addressWarnConfirmBtn = document.getElementById("addressWarnConfirmBtn");
+  if(addressWarnConfirmBtn) addressWarnConfirmBtn.onclick = () => { addressEditUnlocked = true; addressWarningOpen = false; render(); };
+  // No "shipped" checkbox — a tracking number IS the shipped signal, entered
+  // by the operator (or by the tracking-import match), never auto-stamped by
+  // the app just because a box got clicked.
+  const tshirtSizeInput = document.getElementById("tshirtSizeInput");
+  if(tshirtSizeInput) tshirtSizeInput.onchange = async () => {
+    const r = records.find(x=>x.bib===selectedId && x.mode===mode);
+    const it = r.items.find(i=>i.name==="T-Shirt");
+    if(!it) return;
+    const oldSize = it.size;
+    it.size = tshirtSizeInput.value.trim();
+    if(it.size===oldSize) return;
+    await persistRecords();
+    await logAudit("tshirt-size-edit", { bib: r.bib, oldSize, newSize: it.size });
+    render();
+  };
+  document.querySelectorAll("[data-track-url]").forEach(a => a.onclick = (e) => {
+    e.preventDefault();
+    window.shipAPI.openExternal(a.dataset.trackUrl);
+  });
+  document.querySelectorAll("[data-ship-cell]").forEach(td => td.onclick = async () => {
+    const track = td.dataset.shipTrack, date = td.dataset.shipDate, delivered = td.dataset.shipDelivered==="1", key = td.dataset.shipItem;
+    const r = records.find(x=>x.bib===selectedId && x.mode===mode);
+    const it = r.items.find(i=>(i.key||i.name)===key);
+    if(!it) return;
+    if(it.trackingNumber===track){
+      it.trackingNumber = ""; it.shippedDate = ""; it.delivered = false; it.deliveredDate = ""; it.labelAddress = null;
+      await window.shipAPI.unassignByTracking(track);
+      await persistRecords();
+      await logAudit("tracking-unassigned", { bib: r.bib, item: it.name, trackingNumber: track });
+    } else {
+      if(it.trackingNumber && !confirm(`${it.name} is already in shipment ${it.trackingNumber}. Move it to ${track} instead?`)) return;
+      it.trackingNumber = track; it.shippedDate = date; it.delivered = delivered;
+      const res = await window.shipAPI.markAssignedByTracking(track, currentEvent.folderPath, mode, r.bib, [key]);
+      if(res.found){ it.delivered = res.delivered; it.deliveredDate = res.deliveredDate; it.labelAddress = res.labelAddress; }
+      await persistRecords();
+      await logAudit("tracking-applied", { bib: r.bib, trackingNumber: track, shippedDate: date, items: [it.name] });
+    }
+    detailUnassignedEntries = await window.shipAPI.unassignedEntriesForBib(currentEvent.folderPath, mode, r.bib);
+    render();
+  });
+  const applyTrackAllBtn = document.getElementById("applyTrackAllBtn");
+  if(applyTrackAllBtn) applyTrackAllBtn.onclick = async () => {
+    const track = (document.getElementById("allItemsTrack").value||"").trim();
+    const date = (document.getElementById("allItemsDate").value||"").trim();
+    if(!track){ alert("Enter a tracking number first."); return; }
+    const trackParts = track.split(",").map(s=>s.trim()).filter(Boolean);
+    const badParts = trackParts.filter(p=>!isValidTrackingNumber(p));
+    if(badParts.length){ alert(`Doesn't look like a real tracking number: ${badParts.join(", ")}\n\nExpected a USPS (20-22 digit), UPS ("1Z..."), or FedEx (12 or 15 digit) tracking number.`); return; }
+    const r = records.find(x=>x.bib===selectedId && x.mode===mode);
+    // Applies to every item on the record — narrow it down afterward with
+    // the click-to-toggle Shipments table above, same as any Stamps row.
+    const affectedItems = r.items;
+    const affected = affectedItems.map(it=>it.name);
+    const affectedKeys = affectedItems.map(it=>it.key||it.name);
+    r.items.forEach(it=>{ it.trackingNumber = track; if(date) it.shippedDate = date; });
+    // If this tracking # (or any of several, comma-separated) matches a real
+    // Stamps history entry, mark it assigned there too — otherwise it'd keep
+    // showing as unassigned in the Stamps History screen even though it's
+    // already recorded here, and pull in its delivered date / label address.
+    for(const num of track.split(",").map(s=>s.trim()).filter(Boolean)){
+      const res = await window.shipAPI.markAssignedByTracking(num, currentEvent.folderPath, mode, r.bib, affectedKeys);
+      if(res.found){
+        affectedItems.forEach(it=>{ it.delivered = res.delivered; it.deliveredDate = res.deliveredDate; it.labelAddress = res.labelAddress; });
+      }
+    }
+    await persistRecords();
+    await logAudit("tracking-applied", { bib: r.bib, trackingNumber: track, shippedDate: date, items: affected });
+    detailUnassignedEntries = await window.shipAPI.unassignedEntriesForBib(currentEvent.folderPath, mode, r.bib);
+    render();
+  };
+  const addItemBtn = document.getElementById("addItemBtn");
+  if(addItemBtn) addItemBtn.onclick = async () => {
+    const input = document.getElementById("newItemName");
+    const name = input.value.trim();
+    if(!name) return;
+    const trackInput = document.getElementById("newItemTrack");
+    const track = (trackInput.value||"").trim();
+    if(track && !isValidTrackingNumber(track)){
+      alert(`Doesn't look like a real tracking number: ${track}\n\nExpected a USPS (20-22 digit), UPS ("1Z..."), or FedEx (12 or 15 digit) tracking number.`);
+      return;
+    }
+    const date = (document.getElementById("newItemDate").value||"").trim();
+    const r = records.find(x=>x.bib===selectedId && x.mode===mode);
+    r.items.push({ name, batchId:null, trackingNumber:track, shippedDate:track?date:"", delivered:false });
+    await persistRecords();
+    await logAudit("item-added", { bib: r.bib, item: name, trackingNumber: track || undefined });
+    render();
+  };
+}
+
+async function doImport({ fileName } = {}){
+  let filePath = null;
+  if(!fileName){
+    filePath = await window.shipAPI.pickSourceFile(currentEvent.folderPath);
+    if(!filePath) return;
+  }
+  // Preview first (commit:false — nothing written yet). If this import would
+  // remove records, require an explicit confirm before it actually happens.
+  // Nothing destructive runs just because Import was clicked.
+  const preview = fileName
+    ? await window.shipAPI.importSourceFileByName(currentEvent.folderPath, fileName, false)
+    : await window.shipAPI.importSourceFile(currentEvent.folderPath, filePath, false);
+  if(!preview.ok){ alert(preview.error); return; }
+  if(preview.summary.removedStale > 0){
+    const ok = confirm(`This import will REMOVE ${preview.summary.removedStale} record(s) currently in ${mode} that aren't in this file (they have no tracking number or validation on them, so nothing is lost that matters — but this can't be undone from within the app).\n\n${preview.summary.orphanedProtected} other orphaned record(s) have tracking/validated data and will be kept + flagged instead.\n\nProceed with the import?`);
+    if(!ok) return;
+  }
+  const result = fileName
+    ? await window.shipAPI.importSourceFileByName(currentEvent.folderPath, fileName, true)
+    : await window.shipAPI.importSourceFile(currentEvent.folderPath, filePath, true);
+  if(!result.ok){ alert(result.error); return; }
+  await refreshEventData();
+  const s = result.summary;
+  await logAudit("import", { sourceFile: s.sourceFile, summary: s });
+  alert(`Import complete — ${s.sourceFile}\n\nSource rows: ${s.sourceRowCount}\nEligible: ${s.eligible}\nExcluded (no final result): ${s.excludedNoFinalResult}\nExcluded (inconclusive identity): ${s.excludedInconclusive}\nReady: ${s.ready}  Address required: ${s.addressRequired}  Review required: ${s.addressReview}\nMissing email: ${s.missingEmail}  Unrecognized shirt: ${s.unrecognizedShirt}\nDuplicate BIB: ${s.duplicateBib}  Duplicate email: ${s.duplicateEmail}\nGender Top 3: ${s.genderTop3}  Division Top 3: ${s.divisionTop3}\n\nThis import REPLACES the ${mode} record set:\nRemoved (no longer in this file, no shipment progress): ${s.removedStale}\nKept but flagged (orphaned, but has tracking/shipped/validated data — check the exception log): ${s.orphanedProtected}`);
+  render();
+}
+
+function bindModalEvents(){
+  const overlay = document.getElementById("modalOverlay");
+  if(overlay) overlay.onclick = (e) => { if(e.target===overlay) closeModal(); };
+  const x = document.getElementById("modalCloseX"); if(x) x.onclick = closeModal;
+  const c1 = document.getElementById("modalCloseBtn"); if(c1) c1.onclick = closeModal;
+  const c2 = document.getElementById("modalCloseBtn2"); if(c2) c2.onclick = closeModal;
+
+  if(modalState.type==="validate") bindValidateModal();
+  if(modalState.type==="assignHistoryDate") bindAssignHistoryDateModal();
+  if(modalState.type==="bulkManualShip") bindBulkManualShipModal();
+  if(modalState.type==="shipmentWorkflow") bindShipmentWorkflowModal();
+  if(modalState.type==="notify") bindNotifyModal();
+  if(modalState.type==="linkCalendar") bindLinkCalendarModal();
+}
+
+function bindLinkCalendarModal(){
+  const saveBtn = document.getElementById("linkCalendarSaveBtn");
+  if(saveBtn) saveBtn.onclick = async () => {
+    const val = document.getElementById("calendarSelect").value;
+    await linkCalendarEvent(val || null);
+    closeModal();
+  };
+}
+
+function bindValidateModal(){
+  const pending = pendingAddressRecords();
+  const idx = Math.min(modalState.idx||0, Math.max(0,pending.length-1));
+  const r = pending[idx];
+  const skip = document.getElementById("vSkipBtn");
+  if(skip) skip.onclick = () => { modalState.idx = idx+1; render(); };
+  const flag = document.getElementById("vFlagReviewBtn");
+  if(flag) flag.onclick = async () => {
+    r.addressStatus = "ADDRESS REVIEW REQUIRED"; r.stampsValidated = false;
+    await persistRecords();
+    await logAudit("address-flagged-review", { bib: r.bib });
+    render();
+  };
+  const save = document.getElementById("vSaveReadyBtn");
+  if(save) save.onclick = async () => {
+    const before = { ...r.address };
+    document.querySelectorAll("[data-vaddr]").forEach(inp => { r.address[inp.dataset.vaddr] = inp.value.trim(); });
+    const a = r.address;
+    r.addressStatus = (a.street&&a.city&&a.state&&a.zip) ? "READY" : "ADDRESS REVIEW REQUIRED";
+    r.stampsValidated = r.addressStatus === "READY";
+    await persistRecords();
+    await logAudit("address-edit", { bib: r.bib, before, after: { ...r.address }, newStatus: r.addressStatus, viaValidateQueue: true });
+    render();
+  };
+}
+
+function bindNotifyModal(){
+  const s = modalState;
+  const btn = document.getElementById("notifyConfirmBtn");
+  if(btn) btn.onclick = async () => {
+    let sent = 0;
+    const notifiedBibs = [];
+    for(const r of s.list){
+      const shippedItems = r.items.filter(i=>i.trackingNumber);
+      const trackLine = shippedItems.map(i=>`${i.name}: ${i.trackingNumber||"(tracking pending)"}`).join("\n");
+      const res = await window.shipAPI.sendViaOutlook({
+        to: r.email,
+        subject: `Citytri — your shipment is on the way (${currentEvent.active||currentEvent.rsu})`,
+        body: `Hi ${r.firstName},\n\nYour item(s) from ${currentEvent.active||currentEvent.rsu} (BIB ${r.bib}) have shipped:\n\n${trackLine}\n\nThanks for running with us!\nCitytri`,
+        sendMode: "Display", // NEVER auto-send — every email opens as a draft; the human clicks Send in Outlook themselves. No exceptions.
+      });
+      if(res.ok){ sent++; notifiedBibs.push(r.bib); }
+    }
+    await logAudit("notify-drafts-opened", { bibs: notifiedBibs, count: sent });
+    selected = new Set();
+    closeModal();
+    // "Opened," not "Sent" — these are drafts; nothing goes out until the
+    // human clicks Send themselves in Outlook. See the incident in CHANGELOG 0.6.2.
+    alert(`Opened ${sent} of ${s.list.length} notification email draft(s) in Outlook — review and click Send there.`);
+  };
+}
+
+boot();
+</script>
