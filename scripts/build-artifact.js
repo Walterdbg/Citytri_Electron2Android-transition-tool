@@ -41,7 +41,11 @@ if (/<!doctype|<html|<body/i.test(renderer)) {
 const scriptOpenIdx = renderer.indexOf("<script>");
 if (scriptOpenIdx === -1) throw new Error("Could not find the app's <script> tag in renderer/index.html.");
 
-const shell = renderer.slice(0, scriptOpenIdx);
+// Title override only, applied to the copy used for this repo's published
+// artifact — renderer/index.html itself stays an untouched snapshot of the
+// real app shell (see docs/ note: this repo never edits that file).
+const rawShell = renderer.slice(0, scriptOpenIdx);
+const shell = rawShell.replace("<title>Citytri Shipment Tracker</title>", "<title>Citytri Electron2Android — Mobile Preview</title>");
 const appScript = renderer.slice(scriptOpenIdx);
 
 const bannerHtml =
