@@ -1,0 +1,378 @@
+DAILY DEVELOPMENT WORKING LOG
+=============================
+
+Date: 2026-09-17
+Project: Citytri Shipment Tracker
+Application version/build at start: 0.9.7 (exe built 2026-09-16 21:47/09-17 10:56)
+Roadmap version at start: unversioned (no Control de Versiones table yet)
+Primary goal for today: finish UI/responsive polish from local preview into the real exe; respond to real-data issues found during testing.
+Started at: (continuation of an ongoing session, exact start not logged)
+Working by: Walter (directing/approving), Claude Code (implementing)
+
+
+PROTECTED BASELINE / DO NOT BREAK
+---------------------------------
+- Table/column layout must be preserved at every viewport width — no collapsing into a stacked "mobile card" view, ever (direct instruction).
+- The published artifact must only ever use fully synthetic data, never real data in any form (standing rule, docs/BUSINESS_RULES.md).
+- A validated (`stampsValidated: true`) record's address is permanent — no automated process may change it again (standing rule, docs/BUSINESS_RULES.md).
+
+
+WORK ENTRIES
+============
+
+[001]
+Time: morning (before 08:46)
+Area / feature: Topbar
+Request or objective: Hide "SIDEBAR"/"LIBRARY FOLDER" text labels, keep icons only; reduce topbar vertical space.
+Action taken: Changed both topbar buttons to icon-only (☰, 📁); reduced .topbar padding.
+Files modified: renderer/index.html
+Decision made: N/A
+Verification performed: Visual check in local artifact preview.
+Result: PASS
+Observed issue: none
+Follow-up required: none
+Roadmap update required: NO
+
+---
+
+[002]
+Time: morning
+Area / feature: Sidebar — Workflow section
+Request or objective: Reduce vertical space; make instructional text a hover tooltip instead of always-visible.
+Action taken: Moved the "Load Stamps Contacts" explanatory paragraph into a `title` tooltip; tightened button padding/gap.
+Files modified: renderer/index.html
+Verification performed: Visual check in local artifact preview.
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[003]
+Time: morning
+Area / feature: Records table — sticky filter header
+Request or objective: User reported a table row rendering above the sticky "RECORDS —" header at tablet width.
+Action taken: Root-caused: .main's own top padding doesn't scroll away (part of the scrollport), so `top:0` rested 22px below .main's real edge, leaving a gap a row could show through. Fixed with `top:-22px`.
+Files modified: renderer/index.html
+Verification performed: Direct DOM measurement (getBoundingClientRect) proving headRect.top === mainRect.top after the fix; visual screenshot confirmation.
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[004]
+Time: midday
+Area / feature: Mobile rendering
+Request or objective: User reported "mobile is just a zoom out of the site/app."
+Action taken: Found no `<meta name="viewport">` tag existed at all. Confirmed via direct `window.innerWidth` check: reported 980 on a real 390px-wide emulated phone before the fix. Added `<meta name="viewport" content="width=device-width, initial-scale=1">`.
+Files modified: renderer/index.html
+Verification performed: Re-checked `window.innerWidth` after the fix — correctly reported 390. Visual confirmation of real reflow (readable text, proper button sizes) at 390x844.
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[005]
+Time: midday
+Area / feature: Tablet layout (600-960px)
+Request or objective: Direct correction — sidebar must stay a real side column at tablet width, not stack above the main content ("the sidebar is the focus, ready to be hidden if not needed").
+Action taken: Scoped a media query (600-960px) keeping `.layout` as a 2-column grid with a narrower 220px sidebar column, instead of collapsing to 1 column.
+Files modified: renderer/index.html
+Verification performed: Screenshot at 768x1024 — Files/Records visible immediately beside the sidebar, no scroll-past-sidebar required.
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[006]
+Time: midday
+Area / feature: Phone layout (<600px)
+Request or objective: Fix a real overlap — the Files card visually overlapped the sidebar's Status/Workflow content at phone width.
+Action taken: Diagnosed as a CSS Grid row-sizing quirk: `.sidebar`'s grid row sized shorter than its real content, and with `overflow-y:visible` the overflowing content visually spilled into `.main` below it, even though the two elements' own measured boxes had zero gap. Switched phone-width `.layout` from `display:grid` to `display:block`.
+Files modified: renderer/index.html
+Verification performed: Direct `getBoundingClientRect()` measurement before/after; visual screenshot confirmation at 390x844 — no overlap, all Status rows and all 3 Workflow buttons visible.
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[007]
+Time: midday
+Area / feature: Phone layout — sidebar/main width
+Request or objective: (found during [006]'s investigation) `.sidebar`/`.main` measured 774px wide inside a 390px viewport.
+Action taken: Root cause: a CSS Grid `1fr` track defaults to a content-based minimum width unless the grid item has `min-width:0`. Added `min-width:0` to both `.sidebar` and `.main`.
+Files modified: renderer/index.html
+Verification performed: Direct measurement — width dropped from 774px to the correct 390px after the fix.
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[008]
+Time: 10:56
+Area / feature: Deployment
+Request or objective: "the current code is acceptable for the main application (desktop). I need you to deploy it (exe)."
+Action taken: Built the real exe. Verified: no running instance blocking the build; build mtime (10:56) after every source file's last edit; embedded Windows FileVersion/ProductVersion correct (0.9.7); asar-extracted and grepped for markers of every fix above — all present.
+Files created: dist\Citytri Shipment Tracker 0.9.7.exe
+Verification performed: mtime comparison, PowerShell VersionInfo check, asar extraction + grep.
+Result: PASS
+Roadmap update required: NO (see Deployment record below)
+
+---
+
+[009]
+Time: after 10:56
+Area / feature: Published artifact ("Citytri Shipment Tracker")
+Request or objective: "Update the artifacts" (singular — the one Shipment Tracker preview, not CSA).
+Action taken: Regenerated artifact/fixture.json (synthetic) and the artifact HTML from the real renderer source; published to the existing artifact URL.
+Files modified: artifact/fixture.json, artifact/shipment-tracker-preview.generated.html
+Verification performed: Read the existing artifact first per tool requirement; published successfully (version 8).
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[010]
+Time: after [009]
+Area / feature: Published artifact — synthetic fixture
+Request or objective: User noticed no "Grouped"/"Primary" badges appeared in the published artifact and correctly self-diagnosed it as a dummy-data gap, not stale code.
+Action taken: Confirmed via direct script: 0 of 100 synthetic records shared an email. Added deliberate shared-email "family" groups (2 per event, one with an auto-detectable Primary, one ambiguous) to scripts/build-demo-fixture-synthetic.js.
+Files modified: scripts/build-demo-fixture-synthetic.js
+Verification performed: Re-ran the fixture script, confirmed 6 grouped emails present; visual confirmation in local preview (Primary/Group badges, color markers all showing); republished (version 9).
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[DEFECT-001 — see Defects section]
+Time: after [010]
+Area / feature: Group-color assignment
+Request or objective: User reported real exe screenshot showing two different families (Dunn, De Paz) with the same blue color marker; asked if code was hotfixed on the fly.
+Action taken: Confirmed no ad hoc fix occurred — root-caused to the original `groupColor()` using a raw hash-of-email mod 360, which can collide once an event has more than a handful of groups. Replaced with a curated 16-color palette assigned in stable sorted order.
+Files modified: renderer/index.html
+Verification performed: Simulated the fix against the real event's actual known group emails (Dunn, Torres, Berson, DeRienzo, De Paz, Quimby, Patel, Tolley) — confirmed all 8 assigned distinct colors, no collisions.
+Result: PASS (for the color-collision issue specifically — see DEFECT-002 for the regression this introduced)
+Roadmap update required: NO
+
+---
+
+[011]
+Time: after DEFECT-001's fix
+Area / feature: Published artifact
+Action taken: Rebuilt and republished the artifact with the color-palette fix (version 10).
+Files modified: artifact/shipment-tracker-preview.generated.html
+Result: PASS
+Roadmap update required: NO
+
+---
+
+[012]
+Time: 12:42
+Area / feature: Deployment
+Request or objective: "please deploy to the exe. add dev.10 for it to match the artifact tested."
+Action taken: Bumped package.json version to 0.9.7-dev.10; confirmed via mtime comparison that the only source delta since the last exe build was the color-palette fix; built.
+Files modified: package.json
+Files created: dist\Citytri Shipment Tracker 0.9.7-dev.10.exe (first build under this version)
+Verification performed: mtime check, PowerShell VersionInfo (0.9.7-dev.10, uncorrupted), asar grep for GROUP_COLOR_PALETTE.
+Result: PASS (build succeeded) — but see DEFECT-002, found by the user immediately after testing this exact build.
+Roadmap update required: NO
+
+---
+
+[DEFECT-002 — see Defects section]
+Time: shortly after [012]
+Area / feature: App responsiveness — group interactions
+Request or objective: User reported the app freezing/not responding when opening or setting Primary on a record inside a specific email group.
+Action taken: User A/B tested against the previous exe build — confirmed the freeze does NOT happen there, isolating the cause to the color-palette change in [DEFECT-001]/[012]. Root cause found: `groupColor()` filtered the full record list, and for each record in that filter called `emailGroupSize()`, which itself re-filtered the full list again — an O(n^2) cost per call to a function invoked ~3x per row.
+Files modified: renderer/index.html — added `getGroupIndex()`/`getGroupColorMap()`, computing an email->count Map and email->color Map exactly once per render (cache invalidated at the top of `render()`), instead of recomputing per row.
+Verification performed: Direct benchmark simulating a 411-record/15-group dataset — old implementation 1156ms per render, new implementation 1ms per render.
+Result: PASS (fix verified by benchmark; not yet re-confirmed live by Walter in the running app as of this log entry)
+Observed issue: Real, severe regression — full app freeze, confirmed root cause and fix.
+Follow-up required: Walter to confirm live in the rebuilt exe.
+Roadmap update required: YES — new standing rule needed (see Decisions/Documents below).
+
+---
+
+[013]
+Time: after DEFECT-002's fix
+Area / feature: Documentation
+Request or objective: "please add a rules to avoid this kind of oversights to our documentation."
+Action taken: Added a new "Performance in render-heavy UI code" rule to the global DEVELOPMENT_BASE_WORKFLOW_AND_RULES.md and this project's docs/BUSINESS_RULES.md: never call an O(n) list-scan from inside a function called once per row; precompute once per render; test performance-sensitive logic against real data scale, not just a small fixture.
+Files modified: C:\Users\Walte\.claude\DEVELOPMENT_BASE_WORKFLOW_AND_RULES.md, docs/BUSINESS_RULES.md
+Verification performed: Checked for conflicting existing rules before editing (none found).
+Result: PASS
+Roadmap update required: NO (rule lives in BUSINESS_RULES.md, not ROADMAP.md)
+
+---
+
+[014]
+Time: 13:04
+Area / feature: Deployment
+Request or objective: "build the ***dev.10.exe again" (same version, per explicit instruction — the prior dev.10 build was rejected as broken, not treated as a real prior release).
+Action taken: Confirmed no running instance; confirmed the only source delta since the 12:42 build was the freeze fix (main.js/lib/pipeline.js untouched); rebuilt under the same version string 0.9.7-dev.10.
+Files created: dist\Citytri Shipment Tracker 0.9.7-dev.10.exe (second build under this version, supersedes the first)
+Verification performed: mtime check, PowerShell VersionInfo (0.9.7-dev.10, uncorrupted), asar grep confirming the fix is present.
+Result: PASS (build verified; live re-test by Walter still pending)
+Roadmap update required: NO
+
+---
+
+[015]
+Time: after [014]
+Area / feature: App icon (research only)
+Request or objective: User uploaded a Citytri "C" logo image, asked to use it as the app icon for "the next build, later today," and to check CSA's prior notes on an icon-related incident first.
+Action taken: Read-only research (via subagent) of the CSA/Startline project's ROADMAP.md — found the 2026-09-05 incident: two independent Electron icon settings exist (`build.win.icon` for the packaged exe file resource, `BrowserWindow({icon})` for the live window/taskbar icon) — both must be set, and the icon file must be included in `files`/`asarUnpack` to resolve once packaged.
+Files modified: none (research only; icon not yet applied — explicitly deferred: "i said next build for the icon")
+Result: NOT TESTED (deferred)
+Follow-up required: Convert the uploaded PNG to a proper multi-resolution .ico; apply both icon settings; add to files/asarUnpack; ship in a later build today.
+Roadmap update required: YES — log as a pending item.
+
+---
+
+[016]
+Time: after [015]
+Area / feature: Documentation system itself
+Request or objective: "each document must have a version control... a table like the one I showed you... at the moment we create an end of the day final update," then corrected to use the user's own formal templates once provided.
+Action taken: Initially improvised a "Control de Versiones" table (added to CHANGELOG.md and docs/BUSINESS_RULES.md) and a self-authored daily log (docs/daily-logs/2026-09-17.md). User then provided the real templates (docs/Development_Documentation_Protocol.md, docs/Daily_Working_Log_TEMPLATE.txt) — this working log now follows that template exactly, superseding the improvised one.
+Files created: docs/Working_Log_2026-09-17.txt (this file)
+Files modified: CHANGELOG.md, docs/BUSINESS_RULES.md (Control de Versiones tables — kept, still valid under the new protocol)
+Result: IN PROGRESS
+Follow-up required: docs/daily-logs/2026-09-17.md should be marked superseded, not continued.
+Roadmap update required: NO (explicit instruction: "Ignore the roadmap template for today")
+
+
+DEFECTS DISCOVERED TODAY
+========================
+
+[DEFECT-001]
+Time: after [010]
+Area: Group-color assignment (renderer/index.html, groupColor())
+Description: Two different families (Dunn, De Paz) could be assigned the same or a near-identical color.
+Steps to reproduce: Load an event with more than ~5-6 distinct email groups; observe color markers.
+Expected behavior: Every distinct group gets a visually distinct color.
+Actual behavior: Raw hash-of-email mod 360 could collide by chance once there were enough distinct groups.
+Severity: Medium (visual/usability, not data-correctness)
+Status: VERIFIED (fixed with a curated 16-color palette, confirmed via simulation against real known group emails)
+Related files or evidence: renderer/index.html (GROUP_COLOR_PALETTE)
+
+[DEFECT-002]
+Time: immediately after DEFECT-001's fix shipped
+Area: App-wide responsiveness / render performance
+Description: The app froze completely (stopped responding) when interacting with certain grouped records (opening a record, setting Primary).
+Steps to reproduce: On the real 411-record event, open or set Primary on a record inside an email group (e.g. kkpmcg@comcast.net / McGranaghan family).
+Expected behavior: Normal, immediate response.
+Actual behavior: App became fully unresponsive.
+Severity: Critical (usability-blocking)
+Status: FIXED-NOT-TESTED (fix verified by direct benchmark and code review; not yet re-confirmed live by Walter in the rebuilt exe)
+Related files or evidence: renderer/index.html (getGroupIndex/getGroupColorMap); benchmark script (1156ms -> 1ms)
+
+
+DECISIONS MADE TODAY
+====================
+
+[DECISION-001]
+Decision: Ship the freeze-fix exe build as version "0.9.7-dev.10" again (same string as the prior, broken build), rather than incrementing to dev.11.
+Reason: The prior dev.10 build was rejected as broken before real approval/use, so it isn't treated as a "used" version in the sense the version-numbering rule protects against; keeps the exe version traceable to the already-tested artifact version 10.
+Approved by: Walter
+Affected area: Versioning/deployment
+Roadmap update required: NO (documented in CHANGELOG.md instead)
+
+[DECISION-002]
+Decision: App icon work deferred to a later build today, not the freeze-fix build.
+Reason: Direct instruction ("i said next build for the icon"; "pause and think").
+Approved by: Walter
+Affected area: Branding/deployment
+Roadmap update required: YES (pending item)
+
+[DECISION-003]
+Decision: On tablet width, the sidebar must remain a real side column (narrower, not full-width-stacked); phone width is the only range that genuinely stacks.
+Reason: Direct correction — "the sidebar is the focus, ready to be hidden if not needed"; "you are still stacking vertically."
+Approved by: Walter
+Affected area: Responsive layout
+Roadmap update required: NO (implemented and verified same day)
+
+[DECISION-004]
+Decision: Table/column layout is never replaced by a stacked "mobile card" view at any width — horizontal scroll instead.
+Reason: "the app must be usable in table mode and having the functions in columns work better."
+Approved by: Walter
+Affected area: Responsive layout, permanent constraint
+Roadmap update required: YES — should be recorded as a protected-baseline rule.
+
+
+DOCUMENT REGISTER
+=================
+
+Filename | Purpose | Classification | Related work entry | Final status
+docs/Claude_Tablet_Mobile_UI_Protocol.md | Tablet/mobile redesign spec, for a later session today | AUTHORITATIVE (per Walter) | N/A | RETAIN, not yet actioned
+docs/Development_Documentation_Protocol.md | This documentation methodology | AUTHORITATIVE | 016 | RETAIN
+docs/Daily_Working_Log_TEMPLATE.txt | Template this log is built from | AUTHORITATIVE | 016 | RETAIN
+docs/daily-logs/2026-09-17.md | Self-authored daily log, written before the real templates were provided | SUPERSEDED by docs/Working_Log_2026-09-17.txt | 016 | do not continue using
+CHANGELOG.md (Control de Versiones section) | Improvised per-doc version table | SUPPORTING (still valid; not superseded by the new protocol, which uses its own version-history mechanism on the roadmap specifically) | 016 | RETAIN
+docs/BUSINESS_RULES.md (Control de Versiones section) | Same as above | SUPPORTING | 016 | RETAIN
+
+
+DEPLOYMENT / BUILD RECORD
+=========================
+
+Deployment performed: YES (twice)
+
+--- Deployment 1 ---
+Build/version: 0.9.7 (no pre-release suffix)
+Environment: Windows portable exe, dist/
+Deployment time: 10:56
+Deployment result: PASS (build + marker verification); superseded by Deployment 2 the same day after DEFECT-001/002 were found in real testing.
+Verification performed: mtime check, VersionInfo check, asar extraction + grep.
+Rollback required: NO
+Deployment documents: CHANGELOG.md 0.9.7 entry
+Notes: Includes all UI/responsive work ([001]-[007]).
+
+--- Deployment 2 ---
+Build/version: 0.9.7-dev.10 (built twice under the same version string — first at 12:42 with only the color-palette fix, found broken; rebuilt at 13:04 with the freeze fix added)
+Environment: Windows portable exe, dist/
+Deployment time: 12:42 (superseded same day), then 13:04 (current)
+Deployment result: PASS (build + marker verification + benchmark verification); live re-test by Walter still pending as of this log entry.
+Verification performed: mtime check, VersionInfo check, asar extraction + grep, direct performance benchmark.
+Rollback required: NO
+Deployment documents: CHANGELOG.md 0.9.7 addendum, docs/BUSINESS_RULES.md performance rule
+Notes: App icon NOT included — explicitly deferred to a later build today.
+
+
+END-OF-DAY RECONCILIATION
+=========================
+
+Ended at: 2026-09-17 (log closed — full end-of-day reconciliation performed against ROADMAP.md v1.1.0, per docs/Development_Documentation_Protocol.md)
+
+Completed and verified:
+- Icon-only topbar, compact Workflow section, sticky-header gap fix, viewport meta fix, tablet side-column layout, phone display:block fix, min-width:0 fix — all deployed in exe build 1 (0.9.7, 10:56).
+- Group-color palette fix (no more collisions) — verified by simulation against real group emails, deployed in exe build 2.
+- Freeze fix (O(n^2) rendering bug) — verified by direct benchmark, deployed in exe build 2 (0.9.7-dev.10, 13:04).
+- Global and project performance rule added to prevent this class of bug recurring.
+
+Implemented but not fully tested:
+- The 13:04 dev.10 rebuild (freeze fix) has not yet been re-confirmed live by Walter in the running app.
+
+Still in progress:
+- App icon (research done, application deferred to a later build today).
+- Tablet/Mobile UI Protocol implementation (spec created, not yet built).
+
+Blocked:
+- None.
+
+Known defects remaining:
+- None currently open — DEFECT-001 and DEFECT-002 both fixed and verified by tooling; DEFECT-002 awaiting Walter's live confirmation.
+
+Documents retained:
+- docs/Claude_Tablet_Mobile_UI_Protocol.md, docs/Development_Documentation_Protocol.md, docs/Daily_Working_Log_TEMPLATE.txt, docs/Working_Log_2026-09-17.txt.
+
+Documents superseded or rejected:
+- docs/daily-logs/2026-09-17.md -> superseded by docs/Working_Log_2026-09-17.txt.
+
+Roadmap sections updated:
+- The earlier instruction to skip the roadmap today was reversed later the same day: "All updated from today onward... need to follow the new full protocol." Ran the full migration — Document Control, Version Control, Protected Baseline, Current State (Completed/In Progress/Ready for Test), Known Defects, Approved Decisions (DEC-001 through DEC-009), Pending Decisions, Roadmap priorities, Build/Deployment Status, Document Register, Superseded/Rejected Documents, Daily Update Summary — preserving the entire original 536-line narrative verbatim below it (confirmed byte-identical against the archived copy). One gap caught on reconciliation: DEC-009 (icon deferred) had been flagged "Roadmap update required: YES" in this log but was missing from the first roadmap pass — added.
+
+Roadmap version after update: 1.1.0
+
+First action for next workday:
+- Confirm the 0.9.7-dev.10 rebuild live (no freeze on grouped records).
+- Apply the app icon (both `build.win.icon` and `BrowserWindow({icon})`, plus files/asarUnpack) in the next build.
+
+End-of-day review completed by: Walter (directing) / Claude Code (implementing), 2026-09-17
