@@ -40,17 +40,33 @@ and email-integration layer is not — it needs a mobile-appropriate backend,
 which is a real design/implementation effort in its own right, not a
 side effect of adding a Capacitor wrapper.
 
+## Published preview artifact
+
+**https://claude.ai/artifact/3PuGyF8KarjuWCZJwDwVh5** — "Citytri
+Electron2Android — Mobile Preview," built from `renderer/index.html` +
+`artifact/fixture.json` via `scripts/build-artifact.js` (includes a
+viewport-size toolbar for testing tablet/phone breakpoints).
+
+To update it after further changes here: rebuild
+(`node scripts/build-artifact.js`), then republish passing this exact URL
+as `url` — publishing without it creates a separate, disconnected artifact
+instead of updating this one.
+
 ## Contents
 
-- `reference/renderer/index.html` — snapshot of the Shipment Tracker
-  renderer as it stood on 2026-09-17, including the tablet/mobile
-  responsive CSS/JS, copied here as a starting point for frontend
-  extraction. Not wired to any backend — for reference only.
+- `renderer/index.html` / `reference/renderer/index.html` — snapshot of the
+  Shipment Tracker renderer as it stood on 2026-09-17, including the
+  tablet/mobile responsive CSS/JS. Not wired to any backend — for reference
+  only. (Both copies are identical; `renderer/index.html` is the one the
+  build script reads.)
 - `docs/Claude_Tablet_Mobile_UI_Protocol.md` — the original tablet/mobile
   UI spec this work was built from.
+- `artifact/fixture.json`, `scripts/build-artifact.js` — the synthetic-data
+  fixture and build script that produce the published preview above.
 
 ## Status
 
-Not started. No Capacitor/Cordova/Tauri project has been scaffolded yet —
-this repo currently holds reference material only, pending a decision on
-whether to proceed.
+Preview artifact exists and is reproducible from this repo. No
+Capacitor/Cordova/Tauri project has been scaffolded yet — that real
+mobile-wrapper implementation, and the backend rewrite it requires, are
+still pending a decision on whether to proceed.
